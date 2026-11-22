@@ -11,6 +11,7 @@ export interface SharedLoginState {
     origin: string | null;
     deviceLost?: boolean;
     providers?: readonly string[];
+    accountId?: string;
 }
 
 interface SharedLoginResponse {
@@ -73,7 +74,8 @@ export const requestSharedLogin = async (
     return response;
 };
 
-export const initializeSharedLogin = (): Promise<void> => {
+export const initializeSharedLogin = (refresh = false): Promise<void> => {
+    if (refresh) loading = undefined;
     loading ??= (async () => {
         const { electron, location } = window;
         const origin = electron ? await electron.getSharedLoginOrigin?.() ?? null : location.origin;
@@ -89,6 +91,8 @@ export const initializeSharedLogin = (): Promise<void> => {
             available: Boolean(electron?.enrollSharedLogin) || result.status === 200 || result.status === 401,
             device: deviceFrom(result.body),
             origin,
+            accountId: result.status === 200 && typeof result.body === 'object' && result.body !== null
+                && 'accountId' in result.body && typeof result.body.accountId === 'string' ? result.body.accountId : undefined,
             providers: result.status === 200 ? providersFrom(result.body) : state.providers,
             deviceLost: result.status !== 200 && (state.deviceLost || Boolean(electron && origin)),
         });

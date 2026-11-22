@@ -361,8 +361,7 @@ export const settingsCommands: CommandPaletteCommand[] = [
     },
     createSettingsCommand('settings-storage', 'Storage settings', 'Open cache and storage settings', ['storage', 'cache', '存储', '缓存'], 'options', 'storage'),
     createSettingsAnchorCommand('settings-media-cache', 'Media cache', 'Jump to the downloaded audio cache', ['audio cache', 'downloads', 'offline songs', '音频缓存'], 'mediaCache'),
-    createSettingsAnchorCommand('settings-shared-login', 'Shared music login', 'Connect devices to a shared music account', ['shared login', 'link device', '共享登录', '设备授权'], 'sharedLogin'),
-    createSettingsAnchorCommand('settings-r2-sync', 'Sync server settings', 'Open sync server settings', ['sync server', 'd1 sync', 'cloud sync', 'sync settings', '同步', '云同步', 'd1同步'], 'r2Sync'),
+    createSettingsAnchorCommand('settings-r2-sync', 'Sync server settings', 'Open sync server settings', ['sync server', 'd1 sync', 'cloud sync', 'sync settings', '同步', '云同步', 'd1同步', 'shared login', 'link device', '共享登录', '设备授权'], 'r2Sync'),
     {
         id: 'sync-now',
         group: 'settings',

@@ -952,7 +952,6 @@ export default {
       "desktop-toggle-lyric-api": { "title": "API Lirik", "description": "Alihkan endpoint lirik lokal tanpa autentikasi" },
       "settings-obs-copy-css": { "title": "Salin CSS OBS", "description": "Salin Custom CSS OBS Browser Source yang membawa aset unggahan" },
       "settings-storage": { "title": "Pengaturan penyimpanan", "description": "Buka pengaturan cache dan penyimpanan" },
-      "settings-shared-login": { "title": "Login musik bersama", "description": "Hubungkan perangkat ke akun musik bersama" },
       "settings-r2-sync": { "title": "Pengaturan server sinkronisasi", "description": "Buka pengaturan server sinkronisasi" },
       "sync-now": { "title": "Sinkronkan sekarang", "description": "Sinkronkan tema AI" },
       "export-lyric-cache": { "title": "Ekspor lirik tersimpan", "description": "Simpan semua lirik di perangkat ini sebagai .fia dan LRC enhanced dalam satu zip" },
@@ -2732,21 +2731,19 @@ export default {
     "localLibraryWatchNeverScanned": "Belum ada pemindaian otomatis yang berjalan.",
     "localLibraryWatchRecheck": "Periksa ulang folder",
     "r2Sync": "Server Sinkronisasi",
-    "sharedLogin": "Login musik bersama",
     "sharedLoginHint": "Hubungkan perangkat ini, lalu masuk dari jendela akun musik. Keluar dari akun musik bersama akan memutus tautannya di semua perangkat.",
     "sharedLoginConnected": "Terhubung",
-    "sharedLoginDeviceName": "Nama perangkat",
-    "sharedLoginToken": "Sync Token pribadi",
-    "sharedLoginConnect": "Hubungkan perangkat",
     "sharedLoginDisconnect": "Putuskan perangkat ini",
     "sharedLoginRevoke": "Cabut akses",
-    "sharedLoginInvalidToken": "Sync Token ditolak.",
     "sharedLoginError": "Layanan login bersama tidak dapat dijangkau.",
-    "r2SyncEnableDesc": "Menyinkronkan pengaturan tampilan dan tema AI lewat server Anda sendiri.",
+    "r2SyncEnableDesc": "Sinkronkan tampilan, tema AI, dan akun musik melalui server Folia Anda.",
     "r2SyncDeployDocs": "Panduan penerapan",
     "r2SyncWorkerUrl": "URL Server Sinkronisasi",
     "r2SyncToken": "Token Bearer",
-    "r2SyncTokenPlaceholder": "SYNC_TOKEN Worker",
+    "r2SyncTokenPlaceholder": "Token sinkronisasi pribadi",
+    "syncInvalidToken": "Token sinkronisasi ditolak atau perangkat perlu dihubungkan kembali.",
+    "syncDesktopDevice": "Desktop",
+    "syncWebDevice": "Peramban web",
     "r2SyncSave": "Simpan",
     "r2SyncTest": "Uji",
     "r2SyncTesting": "Menguji...",
@@ -4337,6 +4334,21 @@ export default {
       "qqPrivatePlaylists": {
         "title": "Playlist Pribadi QQ Music",
         "description": "Setelah masuk, playlist pribadi buatan Anda kini dapat memuat lagu dengan paging sungguhan. Backend yang di-host sendiri harus memakai qq-music-api 3.1.2 atau lebih baru; backend lama beralih otomatis, dan playlist yang tidak dapat dibaca kini menjelaskan bahwa playlist itu tidak publik, alih-alih tampil kosong tanpa keterangan."
+      }
+    },
+    "v0_7_29_fork_2": {
+      "intro": "Rilis Folia ini berbasis v0.7.29.",
+      "sharedLogin": {
+        "title": "Hubungkan sekali di Server Sinkronisasi",
+        "description": "Masukkan satu alamat server dan token pribadi untuk tampilan, tema AI, dan otorisasi akun musik."
+      },
+      "musicAccounts": {
+        "title": "Pindai sekali untuk tiap layanan",
+        "description": "Bagikan login NetEase Cloud Music dan QQ Music ke perangkat yang terhubung."
+      },
+      "worker": {
+        "title": "Dihosting di Cloudflare",
+        "description": "Buka music.honahec.cc di peramban atau masukkan alamatnya di desktop."
       }
     },
     "v0_7_29_fork_1": {

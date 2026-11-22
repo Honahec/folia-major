@@ -1,6 +1,6 @@
-# Shared music login
+# Folia Sync Server
 
-Use one Folia deployment for the Web/PWA and every desktop client you want to connect. QQ Music and NetEase Cloud Music support shared authorization. Each Folia user has a personal Sync Token for enrolling devices, and each enrolled device has a revocable 90-day session. The separate Sync Server token still serves appearance and theme sync.
+Use one Folia deployment for the Web/PWA and every desktop client you want to connect. QQ Music and NetEase Cloud Music support shared authorization. Each Folia user has a personal Sync Token for enrolling devices, and each enrolled device has a revocable 90-day session. The same Worker and device session sync appearance settings, AI themes, and music account authorizations. Each account has its own settings, themes, and provider sessions in D1.
 
 ## Enable it on Cloudflare
 
@@ -37,8 +37,12 @@ The same D1 binding, cron trigger, and personal Sync Tokens work for both provid
 
 ## Connect the clients
 
-Open **Settings → Connections → Shared music login**. Enter a device name and the user's personal Sync Token. On desktop, enter the Web deployment's HTTPS origin as well. After connecting, open the music account window and scan for each music service you want to share. QQ Music accepts WeChat and mobile QQ. Other devices for that Folia user pick up the shared NetEase authorization when opened or brought back into focus. Scan again to move an existing local sign-in to the shared service.
+Open **Settings → Connections → Sync Server**. Turn on sync, enter the Folia Worker origin and your personal Sync Token, then save. On Web/PWA, open the Folia origin directly. Devices already connected to this Worker can reuse their device session. After connecting, open the music account window and scan for each music service you want to share. QQ Music accepts WeChat and mobile QQ. Other devices for that Folia user pick up the shared NetEase authorization when opened or brought back into focus. Scan again to move an existing local sign-in to the shared service.
 
 Disconnect or revoke an individual device from the settings list. Signing out of a shared provider unlinks its authorization for that user. When the provider requires a new scan, complete it on any connected device. Scheduled renewal keeps the authorization available while clients are closed, up to the upstream session lifetime.
 
 Desktop sessions use the operating system's credential storage. On Linux without a usable secret store, the session lasts until the app exits.
+
+## Existing standalone Sync Server
+
+Clients can still use a standalone Sync Server for appearance and theme sync. To move to the combined Worker, export the library while connected to the old server, connect with your personal Sync Token, then import the archive into your account.

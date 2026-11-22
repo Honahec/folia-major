@@ -952,7 +952,6 @@ export default {
       "desktop-toggle-lyric-api": { "title": "歌词接口", "description": "切换本地免鉴权歌词接口" },
       "settings-obs-copy-css": { "title": "复制 OBS CSS", "description": "复制 OBS 浏览器源的自定义 CSS，把上传的背景/立绘等资产带到 OBS" },
       "settings-storage": { "title": "存储设置", "description": "打开缓存和存储设置" },
-      "settings-shared-login": { "title": "音乐账号共享登录", "description": "连接设备以共享音乐账号" },
       "settings-r2-sync": { "title": "同步服务设置", "description": "打开同步服务设置" },
       "sync-now": { "title": "立即同步", "description": "同步 AI 主题" },
       "export-lyric-cache": { "title": "导出歌词缓存", "description": "把本机所有歌词打包成 .fia 和增强型 LRC 的 zip" },
@@ -2732,21 +2731,19 @@ export default {
     "localLibraryWatchNeverScanned": "还没有自动扫描过。",
     "localLibraryWatchRecheck": "重新检查文件夹",
     "r2Sync": "同步服务",
-    "sharedLogin": "音乐账号共享登录",
     "sharedLoginHint": "连接此设备后，在音乐登录窗口登录。退出已共享的音乐账号会为所有设备解除绑定。",
     "sharedLoginConnected": "已连接",
-    "sharedLoginDeviceName": "设备名称",
-    "sharedLoginToken": "个人 Sync Token",
-    "sharedLoginConnect": "连接设备",
     "sharedLoginDisconnect": "断开此设备",
     "sharedLoginRevoke": "撤销访问",
-    "sharedLoginInvalidToken": "此 Sync Token 无效。",
     "sharedLoginError": "无法连接共享登录服务。",
-    "r2SyncEnableDesc": "用你自己的服务器同步外观设置与 AI 主题。",
+    "r2SyncEnableDesc": "通过 Folia 服务器同步外观、AI 主题和音乐账号。",
     "r2SyncDeployDocs": "部署文档",
     "r2SyncWorkerUrl": "Sync Server 地址",
     "r2SyncToken": "Bearer Token",
-    "r2SyncTokenPlaceholder": "Worker 中的 SYNC_TOKEN",
+    "r2SyncTokenPlaceholder": "个人 Sync Token",
+    "syncInvalidToken": "Sync Token 无效，或此设备需要重新连接。",
+    "syncDesktopDevice": "桌面客户端",
+    "syncWebDevice": "网页客户端",
     "r2SyncSave": "保存",
     "r2SyncTest": "测试",
     "r2SyncTesting": "测试中...",
@@ -4337,6 +4334,21 @@ export default {
       "qqPrivatePlaylists": {
         "title": "QQ 音乐不公开歌单",
         "description": "登录后，自己创建的不公开歌单也能读取歌曲，并支持真正的分页加载。自建后端需要升级到 qq-music-api 3.1.2 或更新版本；旧后端会自动回退，读不到时会明确提示「不是公开歌单」，不再静默显示为空。"
+      }
+    },
+    "v0_7_29_fork_2": {
+      "intro": "此版本基于 Folia v0.7.29。",
+      "sharedLogin": {
+        "title": "在「同步服务」连接一次",
+        "description": "填写一组服务器地址和个人 Sync Token，即可同步外观、AI 主题与音乐账号授权。"
+      },
+      "musicAccounts": {
+        "title": "每个平台扫一次码",
+        "description": "将网易云音乐和 QQ 音乐的登录授权共享给已连接的设备。"
+      },
+      "worker": {
+        "title": "Cloudflare 托管",
+        "description": "在浏览器打开 music.honahec.cc，或将它填入桌面版的服务器地址。"
       }
     },
     "v0_7_29_fork_1": {

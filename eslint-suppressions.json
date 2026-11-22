@@ -10709,9 +10709,6 @@
   "src/services/sync/syncCoordinator.ts": {
     "@typescript-eslint/no-unused-vars": {
       "count": 1
-    },
-    "dedicatus/restricted-apis": {
-      "count": 2
     }
   },
   "src/services/sync/syncFingerprint.ts": {

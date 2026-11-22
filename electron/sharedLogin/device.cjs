@@ -81,11 +81,14 @@ const createSharedLoginDevice = ({ userData, safeStorage, fetch }) => {
         origin: () => load()?.origin ?? null,
         enroll,
         async request(path, method, body, expectedDevice, connectionId) {
+            const syncWrite = typeof path === 'string' && (path === '/sync/settings' || path === '/sync/themes/put');
+            const maxBodyLength = syncWrite ? 1_500_000 : 64_000;
+            const allowsBody = method === 'POST' || (method === 'PUT' && path === '/sync/settings');
             if (typeof path !== 'string' || !/^\/(?:device(?:s(?:\/[a-f0-9-]{36})?)?|[a-z][a-z0-9-]*\/[a-zA-Z0-9/_-]+)(?:\?[^#]*)?$/.test(path)
-                || !['GET', 'POST', 'DELETE'].includes(method)
+                || (!['GET', 'POST', 'DELETE'].includes(method) && !allowsBody)
                 || (connectionId !== undefined && (typeof connectionId !== 'string' || !/^[a-f0-9-]{36}$/.test(connectionId)))
                 || (expectedDevice !== undefined && (typeof expectedDevice !== 'string' || !/^[a-f0-9-]{36}$/.test(expectedDevice)))
-                || (body !== undefined && (method !== 'POST' || typeof body !== 'string' || body.length > 64_000))) {
+                || (body !== undefined && (!allowsBody || typeof body !== 'string' || Buffer.byteLength(body) > maxBodyLength))) {
                 throw new Error('Invalid shared login request');
             }
             const entry = load();

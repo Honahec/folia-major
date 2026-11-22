@@ -952,7 +952,6 @@ export default {
       "desktop-toggle-lyric-api": { "title": "API lời bài hát", "description": "Bật/tắt endpoint lời bài hát nội bộ không cần xác thực" },
       "settings-obs-copy-css": { "title": "Sao chép CSS OBS", "description": "Sao chép CSS tùy chỉnh nguồn OBS kèm tài nguyên đã tải lên" },
       "settings-storage": { "title": "Cài đặt lưu trữ", "description": "Mở cài đặt bộ nhớ đệm và lưu trữ" },
-      "settings-shared-login": { "title": "Đăng nhập nhạc dùng chung", "description": "Kết nối thiết bị với tài khoản nhạc dùng chung" },
       "settings-r2-sync": { "title": "Cài đặt máy chủ đồng bộ", "description": "Mở cài đặt máy chủ đồng bộ" },
       "sync-now": { "title": "Đồng bộ ngay", "description": "Đồng bộ chủ đề AI" },
       "export-lyric-cache": { "title": "Xuất bộ nhớ đệm lời bài hát", "description": "Lưu toàn bộ lời bài hát trên máy vào tệp zip chứa định dạng .fia và LRC nâng cao" },
@@ -2732,21 +2731,19 @@ export default {
     "localLibraryWatchNeverScanned": "Chưa từng quét tự động.",
     "localLibraryWatchRecheck": "Kiểm tra lại thư mục",
     "r2Sync": "Máy chủ đồng bộ",
-    "sharedLogin": "Đăng nhập nhạc dùng chung",
     "sharedLoginHint": "Kết nối thiết bị này, rồi đăng nhập trong cửa sổ tài khoản nhạc. Đăng xuất tài khoản nhạc dùng chung sẽ hủy liên kết trên tất cả thiết bị.",
     "sharedLoginConnected": "Đã kết nối",
-    "sharedLoginDeviceName": "Tên thiết bị",
-    "sharedLoginToken": "Sync Token cá nhân",
-    "sharedLoginConnect": "Kết nối thiết bị",
     "sharedLoginDisconnect": "Ngắt kết nối thiết bị này",
     "sharedLoginRevoke": "Thu hồi quyền truy cập",
-    "sharedLoginInvalidToken": "Sync Token không hợp lệ.",
     "sharedLoginError": "Không thể kết nối dịch vụ đăng nhập dùng chung.",
-    "r2SyncEnableDesc": "Đồng bộ cài đặt giao diện và chủ đề AI qua Cloudflare D1 Worker riêng hoặc máy chủ tự lưu trữ.",
+    "r2SyncEnableDesc": "Đồng bộ giao diện, chủ đề AI và tài khoản nhạc qua máy chủ Folia của bạn.",
     "r2SyncDeployDocs": "Hướng dẫn triển khai",
     "r2SyncWorkerUrl": "URL máy chủ đồng bộ",
     "r2SyncToken": "Bearer Token",
-    "r2SyncTokenPlaceholder": "Worker SYNC_TOKEN",
+    "r2SyncTokenPlaceholder": "Mã đồng bộ cá nhân",
+    "syncInvalidToken": "Mã đồng bộ bị từ chối hoặc thiết bị cần kết nối lại.",
+    "syncDesktopDevice": "Ứng dụng máy tính",
+    "syncWebDevice": "Trình duyệt web",
     "r2SyncSave": "Lưu",
     "r2SyncTest": "Kiểm tra",
     "r2SyncTesting": "Đang kiểm tra...",
@@ -4337,6 +4334,21 @@ export default {
       "qqPrivatePlaylists": {
         "title": "Danh sách phát QQ Music riêng tư",
         "description": "Sau khi đăng nhập, danh sách phát riêng tư của bạn nay có thể tải bài hát với phân trang thực tế. Máy chủ tự lưu trữ cần chạy qq-music-api 3.1.2 trở lên; phiên bản cũ hơn sẽ tự động quay về cơ chế dự phòng, và danh sách phát không đọc được sẽ báo rõ là danh sách không công khai thay vì hiển thị trống."
+      }
+    },
+    "v0_7_29_fork_2": {
+      "intro": "Bản Folia này dựa trên v0.7.29.",
+      "sharedLogin": {
+        "title": "Kết nối một lần trong Máy chủ đồng bộ",
+        "description": "Nhập một địa chỉ máy chủ và mã cá nhân để đồng bộ giao diện, chủ đề AI và phiên đăng nhập nhạc."
+      },
+      "musicAccounts": {
+        "title": "Quét một lần cho mỗi dịch vụ",
+        "description": "Chia sẻ phiên đăng nhập NetEase Cloud Music và QQ Music với các thiết bị đã kết nối."
+      },
+      "worker": {
+        "title": "Triển khai trên Cloudflare",
+        "description": "Mở music.honahec.cc trong trình duyệt hoặc nhập địa chỉ này trong ứng dụng máy tính."
       }
     },
     "v0_7_29_fork_1": {

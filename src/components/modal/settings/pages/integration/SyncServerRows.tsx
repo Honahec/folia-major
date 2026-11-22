@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import ConfirmDialog from '../../../../shared/ConfirmDialog';
 import { Button, Link, Reveal, Row, Status, TextField, Toggle, useSettingsKitTheme } from '../../kit';
 import { O } from './options';
+import { SyncDeviceRows } from './SyncDeviceRows';
 import { useSyncServer } from './useSyncServer';
 
 // src/components/modal/settings/pages/integration/SyncServerRows.tsx
@@ -11,7 +12,7 @@ import { useSyncServer } from './useSyncServer';
 // export and import, the test and the save. The rows stay open while there is something unsaved,
 // so a switch just turned off can still be saved.
 
-const DEPLOY_DOCS_URL = 'https://folia-site.cielaniska.top/guide/deploy-sync';
+const DEPLOY_DOCS_URL = 'https://github.com/Honahec/folia-major/blob/main/docs/shared-music-login.md';
 
 export const SyncServerRows: React.FC = () => {
     const { t } = useTranslation();
@@ -35,17 +36,19 @@ export const SyncServerRows: React.FC = () => {
                         type="url"
                         value={sync.draft.workerBaseUrl}
                         onChange={workerBaseUrl => sync.update({ workerBaseUrl })}
-                        placeholder="https://folia-sync.example.workers.dev"
+                        placeholder="https://music.honahec.cc"
                     />
                 </Row>
-                <Row sub option={O.syncToken}>
-                    <TextField
-                        type="password"
-                        value={sync.draft.authToken}
-                        onChange={authToken => sync.update({ authToken })}
-                        placeholder={t('options.r2SyncTokenPlaceholder')}
-                    />
-                </Row>
+                {!sync.connected && (
+                    <Row sub option={O.syncToken}>
+                        <TextField
+                            type="password"
+                            value={sync.draft.authToken}
+                            onChange={authToken => sync.update({ authToken })}
+                            placeholder={t('options.r2SyncTokenPlaceholder')}
+                        />
+                    </Row>
+                )}
                 <Row sub label={<Status tone={sync.statusTone}>{sync.statusText}</Status>}>
                     <Button onClick={() => void sync.syncThemes()} disabled={cannotSync}>
                         {sync.action === 'syncing' ? t('options.r2SyncSyncing') : t('options.r2SyncNow')}
@@ -64,7 +67,7 @@ export const SyncServerRows: React.FC = () => {
                     <Button onClick={() => void sync.test()} disabled={!sync.configured || busy}>
                         {sync.action === 'testing' ? t('options.r2SyncTesting') : t('options.r2SyncTest')}
                     </Button>
-                    <Button variant="primary" onClick={sync.save} disabled={!sync.dirty}>
+                    <Button variant="primary" onClick={() => void sync.save()} disabled={!sync.dirty || busy || (sync.draft.enabled && !sync.configured)}>
                         {t('options.r2SyncSave')}
                     </Button>
                     <input
@@ -81,6 +84,7 @@ export const SyncServerRows: React.FC = () => {
                     />
                 </Row>
             </Reveal>
+            {sync.sharedDeviceId && <SyncDeviceRows deviceId={sync.sharedDeviceId} />}
             <ConfirmDialog
                 isOpen={sync.hasPendingImport}
                 title={t('options.r2SyncImportLibrary')}

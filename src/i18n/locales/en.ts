@@ -952,7 +952,6 @@ export default {
       "desktop-toggle-lyric-api": { "title": "Lyrics API", "description": "Toggle the local unauthenticated lyrics endpoint" },
       "settings-obs-copy-css": { "title": "Copy OBS CSS", "description": "Copy the OBS Browser Source Custom CSS carrying uploaded assets" },
       "settings-storage": { "title": "Storage settings", "description": "Open cache and storage settings" },
-      "settings-shared-login": { "title": "Shared music login", "description": "Connect devices to a shared music account" },
       "settings-r2-sync": { "title": "Sync server settings", "description": "Open sync server settings" },
       "sync-now": { "title": "Sync now", "description": "Sync AI themes" },
       "export-lyric-cache": { "title": "Export cached lyrics", "description": "Save every lyric on this device as .fia and enhanced LRC in one zip" },
@@ -2732,21 +2731,19 @@ export default {
     "localLibraryWatchNeverScanned": "No automatic scan has run yet.",
     "localLibraryWatchRecheck": "Re-check folders",
     "r2Sync": "Sync Server",
-    "sharedLogin": "Shared music login",
     "sharedLoginHint": "Connect this device, then sign in from the music account window. Signing out of a shared music account unlinks it across devices.",
     "sharedLoginConnected": "Connected",
-    "sharedLoginDeviceName": "Device name",
-    "sharedLoginToken": "Personal Sync Token",
-    "sharedLoginConnect": "Connect device",
     "sharedLoginDisconnect": "Disconnect this device",
     "sharedLoginRevoke": "Revoke access",
-    "sharedLoginInvalidToken": "That Sync Token was rejected.",
     "sharedLoginError": "Could not reach the shared login service.",
-    "r2SyncEnableDesc": "Syncs appearance settings and AI themes through your own server.",
+    "r2SyncEnableDesc": "Sync appearance, AI themes, and music accounts through your Folia server.",
     "r2SyncDeployDocs": "Deployment guide",
     "r2SyncWorkerUrl": "Sync Server URL",
     "r2SyncToken": "Bearer Token",
-    "r2SyncTokenPlaceholder": "Worker SYNC_TOKEN",
+    "r2SyncTokenPlaceholder": "Personal Sync Token",
+    "syncInvalidToken": "The Sync Token was rejected or the device needs to reconnect.",
+    "syncDesktopDevice": "Desktop",
+    "syncWebDevice": "Web browser",
     "r2SyncSave": "Save",
     "r2SyncTest": "Test",
     "r2SyncTesting": "Testing...",
@@ -4337,6 +4334,21 @@ export default {
       "qqPrivatePlaylists": {
         "title": "Private QQ Music Playlists",
         "description": "When signed in, your own private playlists now load their songs, with real paging. Self-hosted backends must run qq-music-api 3.1.2 or later; older backends fall back automatically, and a playlist that cannot be read now says it is not public instead of silently showing as empty."
+      }
+    },
+    "v0_7_29_fork_2": {
+      "intro": "This Folia release is based on v0.7.29.",
+      "sharedLogin": {
+        "title": "Connect once in Sync Server",
+        "description": "Enter one server address and personal Sync Token for appearance, AI themes, and music account authorization."
+      },
+      "musicAccounts": {
+        "title": "Scan once for each music service",
+        "description": "Share your NetEase Cloud Music and QQ Music sign-ins with your connected devices."
+      },
+      "worker": {
+        "title": "Hosted on Cloudflare",
+        "description": "Open music.honahec.cc in your browser or enter it as the server on desktop."
       }
     },
     "v0_7_29_fork_1": {

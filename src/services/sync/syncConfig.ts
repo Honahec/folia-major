@@ -55,6 +55,8 @@ export const getSyncConfig = (): SyncProviderConfig => {
         workerBaseUrl: typeof stored.workerBaseUrl === 'string' ? stored.workerBaseUrl.trim() : '',
         authToken: typeof stored.authToken === 'string' ? stored.authToken.trim() : '',
         enabled: Boolean(stored.enabled),
+        accountId: typeof stored.accountId === 'string' ? stored.accountId : undefined,
+        deviceId: typeof stored.deviceId === 'string' ? stored.deviceId : undefined,
     };
 };
 
@@ -67,14 +69,30 @@ export const saveSyncConfig = (config: SyncProviderConfig) => {
         provider: SYNC_PROVIDER,
         enabled: config.enabled,
         workerBaseUrl: config.workerBaseUrl.trim().replace(/\/+$/, ''),
-        authToken: config.authToken.trim(),
+        authToken: config.deviceId ? '' : config.authToken.trim(),
+        deviceId: config.deviceId,
+        accountId: config.accountId,
     }));
     emitEvent(SYNC_CONFIG_EVENT);
 };
 
+export const hasSyncConnection = (config: SyncProviderConfig) =>
+    Boolean(config.workerBaseUrl && (config.authToken || config.deviceId));
+
 export const isSyncConfigured = (config = getSyncConfig()) => (
-    config.enabled && Boolean(config.workerBaseUrl && config.authToken)
+    config.enabled && hasSyncConnection(config)
 );
+
+export const syncAccountScope = (config: SyncProviderConfig) =>
+    `${config.workerBaseUrl}#${config.accountId ?? config.deviceId ?? ''}`;
+
+export const ensureSyncConfigCurrent = (config: SyncProviderConfig) => {
+    const current = getSyncConfig();
+    if (!current.enabled || current.workerBaseUrl !== config.workerBaseUrl
+        || current.deviceId !== config.deviceId || current.authToken !== config.authToken) {
+        throw new Error('The sync connection changed');
+    }
+};
 
 export const getSyncStatus = (): SyncRuntimeStatus => readJson(SYNC_STATUS_STORAGE_KEY, DEFAULT_STATUS);
 
@@ -97,7 +115,14 @@ export const subscribeSyncConfig = (listener: () => void) => {
     }
 
     window.addEventListener(SYNC_CONFIG_EVENT, listener);
-    return () => window.removeEventListener(SYNC_CONFIG_EVENT, listener);
+    const onStorage = (event: StorageEvent) => {
+        if (event.key === SYNC_CONFIG_STORAGE_KEY) listener();
+    };
+    window.addEventListener('storage', onStorage);
+    return () => {
+        window.removeEventListener(SYNC_CONFIG_EVENT, listener);
+        window.removeEventListener('storage', onStorage);
+    };
 };
 
 export const subscribeSyncStatus = (listener: () => void) => {

@@ -75,7 +75,6 @@ export const SETTINGS_ANCHOR_DEFINITIONS = {
     cacheDetails: { section: 'storage' },
     localLibraryWatch: { section: 'storage' },
     mediaCache: { section: 'storage' },
-    sharedLogin: { section: 'integration' },
     r2Sync: { section: 'integration' },
 
     // pages/StoragePage (backup and import)

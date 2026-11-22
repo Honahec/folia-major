@@ -1,3 +1,4 @@
+import { enrollSharedLogin, getSharedLoginState, initializeSharedLogin, requestSharedLogin } from './sharedLoginClient';
 import type {
     SyncProviderConfig,
     SyncRemoteState,
@@ -40,6 +41,20 @@ const requestJson = async <T,>(
     path: string,
     init: RequestInit = {},
 ): Promise<T> => {
+    if (config.deviceId) {
+        await initializeSharedLogin();
+        const matches = () => getSharedLoginState().device?.id === config.deviceId && getSharedLoginState().origin === config.workerBaseUrl;
+        if (!matches()) await initializeSharedLogin(true);
+        if (!matches()) {
+            throw new SyncClientError('Reconnect this device to the sync server', 401);
+        }
+        const result = await requestSharedLogin(`/sync${path}`, init.method, typeof init.body === 'string' ? init.body : undefined);
+        if (getSharedLoginState().device?.id !== config.deviceId) {
+            throw new SyncClientError('The sync device changed', 409);
+        }
+        if (result.status < 200 || result.status >= 300) throw new SyncClientError(`Sync request failed: ${result.status}`, result.status);
+        return result.body as T;
+    }
     const response = await fetch(buildUrl(config, path), {
         ...init,
         headers: {
@@ -59,6 +74,33 @@ const requestJson = async <T,>(
     }
 
     return await response.json() as T;
+};
+
+export const connectSyncConfig = async (config: SyncProviderConfig, deviceLabel: string): Promise<SyncProviderConfig> => {
+    const workerBaseUrl = config.workerBaseUrl.trim().replace(/\/+$/, '');
+    const authToken = config.authToken.trim();
+    const url = new URL(workerBaseUrl);
+    const next = { ...config, workerBaseUrl, authToken };
+    if (!authToken && config.deviceId) return next;
+    if (url.origin === workerBaseUrl) {
+        const health = await fetch(`${url.origin}/api/sync/health`, {
+            credentials: 'omit', redirect: 'error', signal: AbortSignal.timeout(5_000),
+        }).then(async response => {
+            const body = await response.json().catch(() => null) as WorkerHealthResponse | null;
+            return body?.backend === 'folia-worker-sync' ? body : null;
+        }).catch(() => null);
+        if (health) {
+            if (!health.ok) throw new SyncClientError('The sync database is unavailable', 503);
+            if (!window.electron?.enrollSharedLogin && window.location.origin !== url.origin) {
+                throw new SyncClientError('Open the sync server address in this browser to connect', 400);
+            }
+            const status = await enrollSharedLogin(url.origin, authToken, deviceLabel);
+            const { device, accountId } = getSharedLoginState();
+            if (status !== 201 || !device) throw new SyncClientError(`Sync enrollment failed: ${status}`, status);
+            return { ...next, authToken: '', deviceId: device.id, accountId };
+        }
+    }
+    return { ...next, deviceId: undefined, accountId: undefined };
 };
 
 export const testSyncConnection = async (config: SyncProviderConfig) => (

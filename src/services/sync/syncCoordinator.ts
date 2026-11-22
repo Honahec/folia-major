@@ -1,4 +1,5 @@
-import { getSyncConfig, isSyncConfigured, setSyncStatus } from './syncConfig';
+import { getStoredString, setStoredString } from '../../stores/storagePrimitives';
+import { ensureSyncConfigCurrent, getSyncConfig, isSyncConfigured, setSyncStatus, syncAccountScope } from './syncConfig';
 import { getRemoteState, testSyncConnection } from './syncClient';
 import type { SyncProviderConfig } from './syncTypes';
 import { applySyncedVisualSettings, buildSyncedSettingsRecord, readSyncableSettingsState } from './settingsSnapshot';
@@ -25,25 +26,37 @@ let isSyncingInProgress = false;
 
 const isBrowser = () => typeof window !== 'undefined';
 
-const getLocalSettingsUpdatedAt = () => (
-    isBrowser() ? window.localStorage.getItem(LOCAL_SETTINGS_UPDATED_AT_KEY) : null
-);
-
-const setLocalSettingsUpdatedAt = (updatedAt: string) => {
-    if (isBrowser()) {
-        window.localStorage.setItem(LOCAL_SETTINGS_UPDATED_AT_KEY, updatedAt);
-    }
+const getLocalSettingsUpdatedAt = (config: SyncProviderConfig) => {
+    if (!isBrowser()) return null;
+    const stored = getStoredString(LOCAL_SETTINGS_UPDATED_AT_KEY, '');
+    if (!stored) return null;
+    if (!config.deviceId) return Number.isFinite(Date.parse(stored)) ? stored : null;
+    const prefix = syncAccountScope(config) + '\n';
+    return stored.startsWith(prefix) ? stored.slice(prefix.length) : null;
 };
 
-const pushCurrentSettings = async () => {
-    if (!isSyncConfigured()) {
+const setLocalSettingsUpdatedAt = (updatedAt: string, config = getSyncConfig()) => {
+    if (!isBrowser()) return;
+    const stamp = config.deviceId ? syncAccountScope(config) + '\n' + updatedAt : updatedAt;
+    setStoredString(LOCAL_SETTINGS_UPDATED_AT_KEY, stamp);
+};
+
+const settingsBelongToAnotherAccount = (config: SyncProviderConfig) => {
+    if (!isBrowser()) return false;
+    const stored = getStoredString(LOCAL_SETTINGS_UPDATED_AT_KEY, '');
+    return stored.includes('\n') && !stored.startsWith(syncAccountScope(config) + '\n');
+};
+
+const pushCurrentSettings = async (config = getSyncConfig()) => {
+    if (!isSyncConfigured(config)) {
         return false;
     }
 
     const updatedAt = new Date().toISOString();
     const record = buildSyncedSettingsRecord(readSyncableSettingsState(), updatedAt);
-    setLocalSettingsUpdatedAt(updatedAt);
-    return await pushRemoteSettings(record);
+    const pushed = await pushRemoteSettings(record, config);
+    if (pushed) setLocalSettingsUpdatedAt(updatedAt, config);
+    return pushed;
 };
 
 export const initializeSyncCoordinator = () => {
@@ -61,20 +74,21 @@ export const testSyncProviderConnection = async (config: SyncProviderConfig) => 
     return Boolean(await getRemoteState(config));
 };
 
-export const pullRemoteVisualSettings = async (remoteState?: SyncRemoteState | null) => {
-    if (!isSyncConfigured()) {
+export const pullRemoteVisualSettings = async (remoteState?: SyncRemoteState | null, config = getSyncConfig()) => {
+    if (!isSyncConfigured(config)) {
         return false;
     }
 
-    const remoteSettings = await fetchRemoteSettingsIfNewer(getLocalSettingsUpdatedAt(), remoteState);
+    const remoteSettings = await fetchRemoteSettingsIfNewer(getLocalSettingsUpdatedAt(config), remoteState, config);
     if (!remoteSettings) {
         return false;
     }
 
+    ensureSyncConfigCurrent(config);
     applyingRemoteSettings = true;
     try {
         applySyncedVisualSettings(readSyncableSettingsState(), remoteSettings.data);
-        setLocalSettingsUpdatedAt(remoteSettings.updatedAt);
+        setLocalSettingsUpdatedAt(remoteSettings.updatedAt, config);
         return true;
     } finally {
         applyingRemoteSettings = false;
@@ -104,7 +118,7 @@ export const syncNow = async (options: { syncThemes?: boolean; applyRemoteSettin
     isSyncingInProgress = true;
     setSyncStatus({ state: 'syncing', lastError: null });
     try {
-        const remoteState = await fetchRemoteSyncState();
+        const remoteState = await fetchRemoteSyncState(config);
         let themeSyncResult = {
             uploadedCount: 0,
             downloadedCount: 0,
@@ -113,16 +127,17 @@ export const syncNow = async (options: { syncThemes?: boolean; applyRemoteSettin
             skippedRemoteThemeScan: true,
         };
         if (options.syncThemes ?? true) {
-            themeSyncResult = await pushMissingLocalThemesToRemote(remoteState);
+            themeSyncResult = await pushMissingLocalThemesToRemote(remoteState, config);
         }
         
         let appliedRemoteSettings = false;
         let pushedLocalSettings = false;
         if (options.applyRemoteSettings) {
-            appliedRemoteSettings = await pullRemoteVisualSettings(remoteState);
+            appliedRemoteSettings = await pullRemoteVisualSettings(remoteState, config);
         }
-        if (options.pushSettings) {
-            pushedLocalSettings = await pushCurrentSettings();
+        if (options.pushSettings && !appliedRemoteSettings && !settingsBelongToAnotherAccount(config)) {
+            ensureSyncConfigCurrent(config);
+            pushedLocalSettings = await pushCurrentSettings(config);
         }
         setSyncStatus({ state: 'success', lastSyncAt: new Date().toISOString(), lastError: null });
         const summary = {
@@ -151,8 +166,11 @@ export const syncNow = async (options: { syncThemes?: boolean; applyRemoteSettin
 export const exportSyncLibraryBundle = async (): Promise<SyncLibraryExportBundle> => {
     setSyncStatus({ state: 'syncing', lastError: null });
     try {
-        const settings = buildSyncedSettingsRecord(readSyncableSettingsState(), new Date().toISOString());
-        const themes = await mergeLocalThemesIntoRecords(await listAllRemoteThemeRecords());
+        const config = getSyncConfig();
+        const settings = settingsBelongToAnotherAccount(config)
+            ? null
+            : buildSyncedSettingsRecord(readSyncableSettingsState(), new Date().toISOString());
+        const themes = await mergeLocalThemesIntoRecords(await listAllRemoteThemeRecords(), config);
         const bundle: SyncLibraryExportBundle = {
             kind: 'folia-sync-export',
             schemaVersion: SYNC_SCHEMA_VERSION,
@@ -177,16 +195,20 @@ export const isSyncLibraryExportBundle = (value: unknown): value is SyncLibraryE
 
 export const importSyncLibraryBundle = async (
     bundle: unknown,
-    options: { pushRemote?: boolean } = {},
+    options: { pushRemote?: boolean; config?: SyncProviderConfig } = {},
 ) => {
     const validatedBundle = parseSyncLibraryExportBundle(bundle);
     if (!validatedBundle) {
         throw new Error('Invalid Folia sync export');
     }
 
+    const config = options.config ?? getSyncConfig();
+    const pushRemote = (options.pushRemote ?? true) && isSyncConfigured(config);
     setSyncStatus({ state: 'syncing', lastError: null });
     try {
+        if (pushRemote) ensureSyncConfigCurrent(config);
         await saveSyncLibraryBundleToLocalCache(validatedBundle);
+        if (pushRemote) ensureSyncConfigCurrent(config);
         if (validatedBundle.settings) {
             applyingRemoteSettings = true;
             try {
@@ -196,12 +218,12 @@ export const importSyncLibraryBundle = async (
                 applyingRemoteSettings = false;
             }
         }
-        if (options.pushRemote ?? true) {
-            await pushSyncLibraryBundleToRemote(validatedBundle);
+        if (pushRemote) {
+            await pushSyncLibraryBundleToRemote(validatedBundle, config);
         }
         setSyncStatus({ state: 'success', lastSyncAt: new Date().toISOString(), lastError: null });
         console.info('[sync] Import completed', {
-            pushedRemote: options.pushRemote ?? true,
+            pushedRemote: pushRemote,
             themeCount: validatedBundle.themes.length,
             appliedSettings: Boolean(validatedBundle.settings),
         });

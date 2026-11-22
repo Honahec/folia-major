@@ -16,6 +16,7 @@ export type ThemeSyncRegistryRecord = {
     cacheKey: string;
     updatedAt: string;
     source: SyncedThemeSource;
+    remoteScope?: string;
 };
 
 const hasIndexedDb = () => typeof indexedDB !== 'undefined';
@@ -37,6 +38,7 @@ const parseRegistryRecord = (value: unknown): ThemeSyncRegistryRecord | null => 
         fingerprint: value.fingerprint,
         cacheKey: value.cacheKey,
         updatedAt: value.updatedAt,
+        ...(typeof value.remoteScope === 'string' ? { remoteScope: value.remoteScope } : {}),
         source: value.source === 'auto' || value.source === 'fallback' || value.source === 'edited'
             ? value.source
             : 'manual',

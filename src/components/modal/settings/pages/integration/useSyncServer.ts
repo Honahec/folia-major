@@ -1,8 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createSyncLibraryZipBlob, readSyncLibraryZipFile } from '../../../../../services/sync/syncArchive';
-import { getSyncConfig, getSyncStatus, saveSyncConfig, setSyncStatus, subscribeSyncConfig, subscribeSyncStatus } from '../../../../../services/sync/syncConfig';
+import { getSyncConfig, getSyncStatus, hasSyncConnection, saveSyncConfig, setSyncStatus, subscribeSyncConfig, subscribeSyncStatus } from '../../../../../services/sync/syncConfig';
 import { exportSyncLibraryBundle, importSyncLibraryBundle, isSyncLibraryExportBundle, syncNow, testSyncProviderConnection } from '../../../../../services/sync/syncCoordinator';
+import { connectSyncConfig, SyncClientError } from '../../../../../services/sync/syncClient';
+import { getSharedLoginState, initializeSharedLogin, watchSharedLoginState } from '../../../../../services/sync/sharedLoginClient';
+import { omni } from '../../../../../services/onlineMusic/omni';
 import { SYNC_PROVIDER, type SyncLibraryExportBundle, type SyncProviderConfig } from '../../../../../services/sync/syncTypes';
 import { createSafeObjectUrl } from '../../../../../utils/blobGuards';
 import { formatLocalDateTimeStamp } from '../../../../../utils/downloadFileName';
@@ -19,6 +22,7 @@ const errorText = (error: unknown) => (error instanceof Error ? error.message : 
 
 export const useSyncServer = () => {
     const { t } = useTranslation();
+    const shared = useSyncExternalStore(watchSharedLoginState, getSharedLoginState);
     const [saved, setSaved] = useState<SyncProviderConfig>(getSyncConfig);
     const [draft, setDraft] = useState<SyncProviderConfig>(getSyncConfig);
     const [status, setStatus] = useState(getSyncStatus);
@@ -26,13 +30,14 @@ export const useSyncServer = () => {
     const [testResult, setTestResult] = useState<'idle' | 'success' | 'error'>('idle');
     const [summary, setSummary] = useState<string | null>(null);
     // A sync library read from a file, held until the person confirms that it replaces the local one.
-    const [pendingImport, setPendingImport] = useState<SyncLibraryExportBundle | null>(null);
+    const [pendingImport, setPendingImport] = useState<{ bundle: SyncLibraryExportBundle; config: SyncProviderConfig } | null>(null);
 
     useEffect(() => {
         const unsubscribeConfig = subscribeSyncConfig(() => {
             const next = getSyncConfig();
             setSaved(next);
             setDraft(next);
+            if (next.deviceId && getSharedLoginState().device?.id !== next.deviceId) void initializeSharedLogin(true);
         });
         const unsubscribeStatus = subscribeSyncStatus(() => setStatus(getSyncStatus()));
         return () => {
@@ -41,10 +46,22 @@ export const useSyncServer = () => {
         };
     }, []);
 
+    useEffect(() => { void initializeSharedLogin(); }, []);
+
+    useEffect(() => {
+        if (saved.workerBaseUrl || !shared.origin || action !== 'idle') return;
+        if (shared.device) {
+            saveSyncConfig({ ...getSyncConfig(), enabled: true, workerBaseUrl: shared.origin, deviceId: shared.device.id, accountId: shared.accountId });
+        } else if (shared.available && !window.electron) {
+            setDraft(previous => previous.workerBaseUrl ? previous : { ...previous, workerBaseUrl: shared.origin ?? '' });
+        }
+    }, [action, saved.workerBaseUrl, shared.origin, shared.device, shared.available, shared.accountId]);
+
     const dirty = JSON.stringify(saved) !== JSON.stringify(draft);
-    const configured = Boolean(draft.workerBaseUrl.trim() && draft.authToken.trim());
+    const connected = Boolean(draft.deviceId && shared.device?.id === draft.deviceId && shared.origin === draft.workerBaseUrl);
+    const configured = hasSyncConnection({ ...draft, deviceId: connected ? draft.deviceId : undefined });
     const statusLabel = status.state === 'error'
-        ? (status.lastError || t('options.r2SyncStatusError'))
+        ? t('options.r2SyncStatusError')
         : status.lastSyncAt
             ? `${t('options.r2SyncLastSync')}: ${new Date(status.lastSyncAt).toLocaleString()}`
             : t('options.r2SyncStatusIdle');
@@ -53,49 +70,70 @@ export const useSyncServer = () => {
         : testResult === 'error' || (!summary && status.state === 'error') ? 'error' : undefined;
 
     const update = (patch: Partial<SyncProviderConfig>) => {
-        setDraft(previous => ({ ...previous, ...patch, provider: SYNC_PROVIDER }));
+        setDraft(previous => {
+            const next = { ...previous, ...patch, provider: SYNC_PROVIDER };
+            if (patch.workerBaseUrl === undefined || patch.workerBaseUrl === previous.workerBaseUrl) return next;
+            if (shared.device && patch.workerBaseUrl.trim().replace(/\/+$/, '') === shared.origin) {
+                return { ...next, authToken: '', deviceId: shared.device.id, accountId: shared.accountId };
+            }
+            return { ...next, deviceId: undefined, accountId: undefined };
+        });
     };
 
-    const save = () => {
-        saveSyncConfig(draft);
-        setSaved(getSyncConfig());
-    };
-
-    const test = async () => {
+    const save = async () => {
         setAction('testing');
         setTestResult('idle');
         setSummary(null);
-        const next = {
-            ...draft,
-            workerBaseUrl: draft.workerBaseUrl.trim().replace(/\/+$/, ''),
-            authToken: draft.authToken.trim(),
-        };
         try {
-            if (await testSyncProviderConnection(next)) {
-                saveSyncConfig(next);
-                setSaved(getSyncConfig());
-                setSyncStatus({ state: 'success', lastSyncAt: new Date().toISOString(), lastError: null });
-                setTestResult('success');
-                setSummary(t('ui.storage.syncTestSuccess'));
-            } else {
-                setTestResult('error');
-                setSummary(t('ui.storage.syncTestFailed'));
+            let next = draft;
+            if (draft.enabled) {
+                next = await connectSyncConfig(draft, t(window.electron ? 'options.syncDesktopDevice' : 'options.syncWebDevice'));
+                if (next.deviceId) {
+                    saveSyncConfig(next);
+                    if (next.deviceId !== saved.deviceId) void omni.refreshSharedLoginAccounts();
+                }
+                if (!await testSyncProviderConnection(next)) {
+                    setTestResult('error');
+                    setSummary(t('ui.storage.syncTestFailed'));
+                    return false;
+                }
             }
+            if (!next.deviceId || !next.enabled) saveSyncConfig(next);
+            setTestResult('success');
+            setSummary(t('ui.storage.syncTestSuccess'));
+            return true;
         } catch (error) {
             setTestResult('error');
-            setSummary(errorText(error));
-            setSyncStatus({ state: 'error', lastError: errorText(error) });
+            const key = error instanceof SyncClientError && error.status === 401 ? 'options.syncInvalidToken' : 'ui.storage.syncTestFailed';
+            setSummary(t(key));
+            setSyncStatus({ state: 'error', lastError: t(key) });
+            return false;
         } finally {
             setAction('idle');
-            // The result keeps its colour for a moment; the line itself stays.
-            window.setTimeout(() => setTestResult('idle'), 3000);
+        }
+    };
+
+    const test = async () => {
+        if (dirty) {
+            await save();
+            return;
+        }
+        setAction('testing');
+        setSummary(null);
+        try {
+            const passed = await testSyncProviderConnection(draft);
+            setTestResult(passed ? 'success' : 'error');
+            setSummary(t(passed ? 'ui.storage.syncTestSuccess' : 'ui.storage.syncTestFailed'));
+        } catch {
+            setTestResult('error');
+            setSyncStatus({ state: 'error', lastError: t('ui.storage.syncTestFailed') });
+        } finally {
+            setAction('idle');
         }
     };
 
     const syncThemes = async () => {
-        if (dirty) {
-            save();
-        }
+        if (dirty && !await save()) return;
         setAction('syncing');
         setSummary(null);
         try {
@@ -114,9 +152,7 @@ export const useSyncServer = () => {
     };
 
     const syncSettings = async () => {
-        if (dirty) {
-            save();
-        }
+        if (dirty && !await save()) return;
         setAction('syncingSettings');
         setSummary(null);
         try {
@@ -152,6 +188,7 @@ export const useSyncServer = () => {
 
     /** Reads a zip or JSON sync library and holds it for the confirmation; the import stays "running" until that is answered. */
     const readImportFile = async (file: File) => {
+        const config = getSyncConfig();
         setAction('importing');
         try {
             const parsed = file.name.toLowerCase().endsWith('.zip')
@@ -160,7 +197,7 @@ export const useSyncServer = () => {
             if (!isSyncLibraryExportBundle(parsed)) {
                 throw new Error('Invalid Folia sync export');
             }
-            setPendingImport(parsed);
+            setPendingImport({ bundle: parsed, config });
         } catch (error) {
             setSyncStatus({ state: 'error', lastError: errorText(error) });
             setAction('idle');
@@ -174,10 +211,10 @@ export const useSyncServer = () => {
 
     /** Replaces the local sync library with the file that was read, and pushes it to the server when sync is on. */
     const confirmImport = async () => {
-        const bundle = pendingImport;
+        const pending = pendingImport;
         setPendingImport(null);
         try {
-            await importSyncLibraryBundle(bundle, { pushRemote: draft.enabled && configured });
+            if (pending) await importSyncLibraryBundle(pending.bundle, { config: pending.config });
         } catch (error) {
             setSyncStatus({ state: 'error', lastError: errorText(error) });
         } finally {
@@ -189,6 +226,8 @@ export const useSyncServer = () => {
         draft,
         dirty,
         configured,
+        connected,
+        sharedDeviceId: shared.device?.id,
         action,
         statusText: summary || statusLabel,
         statusTone,

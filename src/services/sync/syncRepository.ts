@@ -1,7 +1,7 @@
 import type { SongResult, DualTheme } from '../../types';
 import { getCacheEntriesByPrefix, getFromCache, saveToCache } from '../db';
 import { sanitizeDualTheme } from '../themeSanitizer';
-import { getSyncConfig, isSyncConfigured, setSyncStatus } from './syncConfig';
+import { ensureSyncConfigCurrent, getSyncConfig, isSyncConfigured, setSyncStatus, syncAccountScope } from './syncConfig';
 import {
     getRemoteState,
     getRemoteSettings,
@@ -27,6 +27,7 @@ import {
 } from './themeSyncRegistry';
 import type {
     SyncLibraryExportBundle,
+    SyncProviderConfig,
     SyncRemoteState,
     SyncedSettingsRecord,
     SyncedThemeRecord,
@@ -46,6 +47,8 @@ type ThemeSyncWatermark = {
     remoteThemesUpdatedAt: string | null;
     remoteThemeCount: number;
     localRegistrySignature: string;
+    workerBaseUrl: string;
+    deviceId?: string;
 };
 
 export type ThemeSyncUploadResult = {
@@ -85,6 +88,8 @@ const readThemeSyncWatermark = (): ThemeSyncWatermark | null => {
             remoteThemesUpdatedAt: typeof parsed.remoteThemesUpdatedAt === 'string' ? parsed.remoteThemesUpdatedAt : null,
             remoteThemeCount: typeof parsed.remoteThemeCount === 'number' ? parsed.remoteThemeCount : -1,
             localRegistrySignature: parsed.localRegistrySignature,
+            workerBaseUrl: typeof parsed.workerBaseUrl === 'string' ? parsed.workerBaseUrl : '',
+            deviceId: typeof parsed.deviceId === 'string' ? parsed.deviceId : undefined,
         };
     } catch {
         return null;
@@ -143,8 +148,7 @@ const isThemeWatermarkFresh = (
     && watermark.localRegistrySignature === localRegistrySignature
 );
 
-export const fetchRemoteSyncState = async (): Promise<SyncRemoteState | null> => {
-    const config = getConfiguredSync();
+export const fetchRemoteSyncState = async (config = getConfiguredSync()): Promise<SyncRemoteState | null> => {
     if (!config) {
         return null;
     }
@@ -159,8 +163,8 @@ export const fetchRemoteSyncState = async (): Promise<SyncRemoteState | null> =>
 export const fetchRemoteSettingsIfNewer = async (
     localUpdatedAt: string | null,
     remoteState?: SyncRemoteState | null,
+    config = getConfiguredSync(),
 ): Promise<SyncedSettingsRecord | null> => {
-    const config = getConfiguredSync();
     if (!config) {
         return null;
     }
@@ -176,8 +180,7 @@ export const fetchRemoteSettingsIfNewer = async (
     return remoteSettings;
 };
 
-export const pushRemoteSettings = async (record: SyncedSettingsRecord) => {
-    const config = getConfiguredSync();
+export const pushRemoteSettings = async (record: SyncedSettingsRecord, config = getConfiguredSync()) => {
     if (!config) {
         return false;
     }
@@ -191,6 +194,7 @@ const saveRemoteThemeToLocalCache = async (
     record: SyncedThemeRecord,
     preferredCacheKey?: string,
     skipRegistryUpdate = false,
+    remoteScope?: string,
 ) => {
     const cacheKey = preferredCacheKey ?? getThemeCacheKeyFromFingerprint(record.fingerprint);
     if (!cacheKey) {
@@ -203,6 +207,7 @@ const saveRemoteThemeToLocalCache = async (
         cacheKey,
         updatedAt: record.updatedAt,
         source: record.source,
+        remoteScope,
     };
     if (!skipRegistryUpdate) {
         await upsertThemeSyncRecord(registryRecord);
@@ -228,11 +233,15 @@ export const getSyncedThemeForSong = async (song: SongResult | null): Promise<Du
         return null;
     }
 
+    ensureSyncConfigCurrent(config);
     const theme = sanitizeDualTheme(matched.theme);
-    if (song?.id != null) {
-        await saveToCache(`dual_theme_${getPlaybackSongKey(song)}`, theme);
+    const cacheKey = song?.id != null ? `dual_theme_${getPlaybackSongKey(song)}` : undefined;
+    const remoteScope = syncAccountScope(config);
+    const saved = await saveRemoteThemeToLocalCache(matched, cacheKey, false, remoteScope);
+    const primary = createSongSyncFingerprint(song);
+    if (primary && saved && primary !== saved.fingerprint) {
+        await upsertThemeSyncRecord({ ...saved, fingerprint: primary });
     }
-    await saveRemoteThemeToLocalCache(matched);
     return theme;
 };
 
@@ -282,14 +291,18 @@ const hydrateLegacyNeteaseThemeSyncRecords = async () => {
     }
 };
 
+const getThemesForSyncAccount = async (config: SyncProviderConfig) => {
+    const scope = syncAccountScope(config);
+    return (await getThemeSyncRegistryRecords()).filter(record => !record.remoteScope || record.remoteScope === scope);
+};
+
 const collectLocalThemeUploadEntries = async (
     remoteRecords: Map<string, SyncedThemeRecord>,
-    localRecords?: ThemeSyncRegistryRecord[],
+    localRecords: ThemeSyncRegistryRecord[],
 ) => {
     const uploadEntries: SyncedThemeRecord[] = [];
-    const resolvedLocalRecords = localRecords ?? await getThemeSyncRegistryRecords();
 
-    for (const record of resolvedLocalRecords) {
+    for (const record of localRecords) {
         const remoteRecord = remoteRecords.get(record.fingerprint);
         if (remoteRecord && !isRemoteNewer(record.updatedAt, remoteRecord.updatedAt)) {
             continue;
@@ -319,9 +332,8 @@ const collectLocalThemeUploadEntries = async (
     return uploadEntries;
 };
 
-const getRemoteThemesForBuckets = async (bucketIds: number[]) => {
-    const config = getConfiguredSync();
-    if (!config || bucketIds.length === 0) {
+const getRemoteThemesForBuckets = async (bucketIds: number[], config: SyncProviderConfig) => {
+    if (bucketIds.length === 0) {
         return [];
     }
 
@@ -334,8 +346,8 @@ const getRemoteThemesForBuckets = async (bucketIds: number[]) => {
 
 export const pushMissingLocalThemesToRemote = async (
     remoteState?: SyncRemoteState | null,
+    config = getConfiguredSync(),
 ): Promise<ThemeSyncUploadResult> => {
-    const config = getConfiguredSync();
     if (!config) {
         return {
             uploadedCount: 0,
@@ -346,7 +358,7 @@ export const pushMissingLocalThemesToRemote = async (
         };
     }
 
-    const state = remoteState ?? await fetchRemoteSyncState();
+    const state = remoteState ?? await fetchRemoteSyncState(config);
     if (!state) {
         return {
             uploadedCount: 0,
@@ -358,10 +370,12 @@ export const pushMissingLocalThemesToRemote = async (
     }
 
     await hydrateLegacyNeteaseThemeSyncRecords();
-    const localRecords = await getThemeSyncRegistryRecords();
+    const remoteScope = syncAccountScope(config);
+    const localRecords = await getThemesForSyncAccount(config);
     const localRegistrySignature = getLocalThemeRegistrySignature(localRecords);
     const existingWatermark = readThemeSyncWatermark();
-    if (isThemeWatermarkFresh(existingWatermark, state, localRegistrySignature)) {
+    if (existingWatermark?.workerBaseUrl === config.workerBaseUrl && existingWatermark.deviceId === config.deviceId
+        && isThemeWatermarkFresh(existingWatermark, state, localRegistrySignature)) {
         return {
             uploadedCount: 0,
             downloadedCount: 0,
@@ -388,6 +402,7 @@ export const pushMissingLocalThemesToRemote = async (
         .map(bucket => bucket.bucketId);
     if (diffBucketIds.length === 0) {
         writeThemeSyncWatermark({
+            workerBaseUrl: config.workerBaseUrl, deviceId: config.deviceId,
             remoteThemesUpdatedAt: state.themesUpdatedAt,
             remoteThemeCount: state.themeCount,
             localRegistrySignature,
@@ -403,7 +418,8 @@ export const pushMissingLocalThemesToRemote = async (
 
     const diffBucketIdSet = new Set(diffBucketIds);
     const affectedLocalRecords = localRecords.filter(record => diffBucketIdSet.has(getThemeBucketId(record.fingerprint)));
-    const remoteRecords = await getRemoteThemesForBuckets(diffBucketIds);
+    const remoteRecords = await getRemoteThemesForBuckets(diffBucketIds, config);
+    ensureSyncConfigCurrent(config);
     const remoteRecordMap = new Map(remoteRecords.map(record => [record.fingerprint, record]));
     const localRecordMap = new Map(localRecords.map(record => [record.fingerprint, record]));
     let downloadedCount = 0;
@@ -415,7 +431,8 @@ export const pushMissingLocalThemesToRemote = async (
             continue;
         }
 
-        const registryRecord = await saveRemoteThemeToLocalCache(remoteRecord, localRecord?.cacheKey, true);
+        ensureSyncConfigCurrent(config);
+        const registryRecord = await saveRemoteThemeToLocalCache(remoteRecord, localRecord?.cacheKey, true, remoteScope);
         if (registryRecord) {
             downloadedRegistryRecords.push(registryRecord);
             downloadedCount += 1;
@@ -427,11 +444,12 @@ export const pushMissingLocalThemesToRemote = async (
 
     const uploadEntries = await collectLocalThemeUploadEntries(remoteRecordMap, affectedLocalRecords);
     for (let index = 0; index < uploadEntries.length; index += THEME_BATCH_SIZE) {
+        ensureSyncConfigCurrent(config);
         await putRemoteThemes(config, uploadEntries.slice(index, index + THEME_BATCH_SIZE));
     }
 
     if (uploadEntries.length === 0) {
-        const nextLocalRecords = await getThemeSyncRegistryRecords();
+        const nextLocalRecords = await getThemesForSyncAccount(config);
         const nextLocalBuckets = buildThemeBucketSummaries(nextLocalRecords);
         const bucketsAreNowEqual = diffBucketIds.every((bucketId) => {
             const remoteBucket = remoteBuckets.get(bucketId);
@@ -439,6 +457,7 @@ export const pushMissingLocalThemesToRemote = async (
         });
         if (bucketsAreNowEqual) {
             writeThemeSyncWatermark({
+                workerBaseUrl: config.workerBaseUrl, deviceId: config.deviceId,
                 remoteThemesUpdatedAt: state.themesUpdatedAt,
                 remoteThemeCount: state.themeCount,
                 localRegistrySignature: getLocalThemeRegistrySignature(nextLocalRecords),
@@ -476,10 +495,11 @@ export const listAllRemoteThemeRecords = async () => {
 
 export const mergeLocalThemesIntoRecords = async (
     remoteThemes: SyncedThemeRecord[],
+    config = getSyncConfig(),
 ) => {
     await hydrateLegacyNeteaseThemeSyncRecords();
     const recordMap = new Map(remoteThemes.map(record => [record.fingerprint, record]));
-    const localUploads = await collectLocalThemeUploadEntries(recordMap);
+    const localUploads = await collectLocalThemeUploadEntries(recordMap, await getThemesForSyncAccount(config));
     localUploads.forEach(record => recordMap.set(record.fingerprint, record));
     return Array.from(recordMap.values()).sort((a, b) => a.fingerprint.localeCompare(b.fingerprint));
 };
@@ -497,8 +517,7 @@ export const saveSyncLibraryBundleToLocalCache = async (bundle: SyncLibraryExpor
     }
 };
 
-export const pushSyncLibraryBundleToRemote = async (bundle: SyncLibraryExportBundle) => {
-    const config = getConfiguredSync();
+export const pushSyncLibraryBundleToRemote = async (bundle: SyncLibraryExportBundle, config = getConfiguredSync()) => {
     if (!config) {
         return false;
     }

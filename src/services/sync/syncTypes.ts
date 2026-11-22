@@ -16,6 +16,8 @@ export type SyncProviderConfig = {
     enabled: boolean;
     workerBaseUrl: string;
     authToken: string;
+    deviceId?: string;
+    accountId?: string;
 };
 
 export type SyncRuntimeStatus = {

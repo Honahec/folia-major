@@ -8,7 +8,6 @@ import { Button, CopyValue, Group, Reveal, Row, Status, Toggle, Value, type Sett
 import NavidromeRows from './integration/NavidromeRows';
 import { O, SERVICES, STREAMING } from './integration/options';
 import { DesktopStageRows, WebStageRows } from './integration/StageModeRows';
-import { SharedLoginRows } from './integration/SharedLoginRows';
 import SyncServerRows from './integration/SyncServerRows';
 import { useSettingsPage } from './settingsPageContext';
 
@@ -42,7 +41,6 @@ const IntegrationPage: React.FC = () => {
             <Group def={SERVICES}>
                 <NavidromeRows />
                 <SyncServerRows />
-                <SharedLoginRows />
                 {isElectron && (
                     <>
                         <Row option={O.discord} hint={t('options.discordRichPresenceDesc')}>
