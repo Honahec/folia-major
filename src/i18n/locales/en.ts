@@ -4339,6 +4339,21 @@ export default {
         "description": "When signed in, your own private playlists now load their songs, with real paging. Self-hosted backends must run qq-music-api 3.1.2 or later; older backends fall back automatically, and a playlist that cannot be read now says it is not public instead of silently showing as empty."
       }
     },
+    "v0_7_29_fork_1": {
+      "intro": "This Folia release is based on v0.7.29.",
+      "sharedLogin": {
+        "title": "Connect your devices",
+        "description": "Use your personal Sync Token to join the same Folia account on desktop and on the web."
+      },
+      "musicAccounts": {
+        "title": "Scan once for each music service",
+        "description": "Share your NetEase Cloud Music and QQ Music sign-ins with your connected devices."
+      },
+      "worker": {
+        "title": "Hosted on Cloudflare",
+        "description": "Open music.honahec.cc in your browser or enter it as the server on desktop."
+      }
+    },
     "v0_7_29": {
       "intro": "Welcome to 0.7.29, the Feynman Update—a major update. Personal FM gets its own radio wall, there is a new lyric style called Metaphor, and a performance check tells you how much visual quality this computer can handle.",
       "radioWall": {

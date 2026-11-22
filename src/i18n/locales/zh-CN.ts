@@ -4339,6 +4339,21 @@ export default {
         "description": "登录后，自己创建的不公开歌单也能读取歌曲，并支持真正的分页加载。自建后端需要升级到 qq-music-api 3.1.2 或更新版本；旧后端会自动回退，读不到时会明确提示「不是公开歌单」，不再静默显示为空。"
       }
     },
+    "v0_7_29_fork_1": {
+      "intro": "此版本基于 Folia v0.7.29。",
+      "sharedLogin": {
+        "title": "连接你的设备",
+        "description": "在桌面版和网页版输入个人同步令牌，连接到同一个 Folia 账号。"
+      },
+      "musicAccounts": {
+        "title": "每个平台扫一次码",
+        "description": "将网易云音乐和 QQ 音乐的登录授权共享给已连接的设备。"
+      },
+      "worker": {
+        "title": "Cloudflare 托管",
+        "description": "在浏览器打开 music.honahec.cc，或将它填入桌面版的服务器地址。"
+      }
+    },
     "v0_7_29": {
       "intro": "欢迎来到 0.7.29「Feynman Update」：这是一次重大更新。私人 FM 有了自己的电台墙，新增歌词样式「隐喻」，还能一键检测这台电脑跑得动多高的画质。",
       "radioWall": {

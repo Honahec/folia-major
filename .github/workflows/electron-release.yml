@@ -43,12 +43,21 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            RELEASE_FILE_VERSION="$(node -e "const version=require('./package.json').version; if (!/^[0-9]+\\.[0-9]+\\.[0-9]+$/.test(version)) throw new Error('package.json version must be a stable A.B.C version for a manual Realeco release.'); process.stdout.write(version);")"
-          else
-            COMMIT_MESSAGE="$(git log -1 --format=%B)"
-            RELEASE_FILE_VERSION="$(COMMIT_MESSAGE="${COMMIT_MESSAGE}" node -e "const fs=require('fs'); const { validateRealecoReleaseMetadata }=require('./shared/realecoReleaseMetadata.cjs'); process.stdout.write(validateRealecoReleaseMetadata({ commitMessage: process.env.COMMIT_MESSAGE, releaseFileContent: fs.readFileSync('realeco-release', 'utf8'), packageVersion: require('./package.json').version }));")"
-          fi
+          RELEASE_FILE_VERSION="$(node <<'NODE'
+          const fs = require('node:fs');
+          const { execFileSync } = require('node:child_process');
+          const { validateRealecoReleaseMetadata } = require('./shared/realecoReleaseMetadata.cjs');
+          const packageVersion = require('./package.json').version;
+          const forkRelease = process.env.GITHUB_REPOSITORY === 'Honahec/folia-major';
+          const manual = process.env.GITHUB_EVENT_NAME === 'workflow_dispatch';
+          process.stdout.write(validateRealecoReleaseMetadata({
+            commitMessage: manual ? `release: v${packageVersion}` : execFileSync('git', ['log', '-1', '--format=%B'], { encoding: 'utf8' }).trimEnd(),
+            releaseFileContent: manual && !forkRelease ? packageVersion : fs.readFileSync('realeco-release', 'utf8'),
+            packageVersion,
+            forkRelease,
+          }));
+          NODE
+          )"
 
           RELEASES_FILE="$(mktemp)"
           trap 'rm -f "${RELEASES_FILE}"' EXIT
@@ -57,20 +66,14 @@ jobs:
           const fs = require('fs');
           const target = process.env.RELEASE_FILE_VERSION;
           const releases = JSON.parse(fs.readFileSync(process.env.RELEASES_FILE, 'utf8'));
-          const parse = (tag) => {
-            const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(tag || '');
-            return match ? match.slice(1).map(Number) : null;
-          };
-          const compare = (left, right) => left.findIndex((part, index) => part !== right[index]);
-          const compareVersions = (left, right) => {
-            const index = compare(left, right);
-            return index === -1 ? 0 : left[index] > right[index] ? 1 : -1;
-          };
-          const targetParts = parse(target);
+          const { compareVersions } = require('./electron/updateChannels.cjs');
+          const versionPattern = process.env.GITHUB_REPOSITORY === 'Honahec/folia-major'
+            ? /^v[0-9]+\.[0-9]+\.[0-9]+-fork\.[1-9][0-9]*$/
+            : /^v?[0-9]+\.[0-9]+\.[0-9]+$/;
           const existing = releases.find((release) => release.tag_name === `v${target}`);
-          const publicReleases = releases.filter((release) => !release.draft && !release.prerelease && parse(release.tag_name));
+          const publicReleases = releases.filter((release) => !release.draft && !release.prerelease && versionPattern.test(release.tag_name));
           const latest = publicReleases.reduce((current, release) => {
-            if (!current || compareVersions(parse(release.tag_name), parse(current.tag_name)) > 0) return release;
+            if (!current || compareVersions(release.tag_name, current.tag_name) > 0) return release;
             return current;
           }, null);
 
@@ -81,7 +84,7 @@ jobs:
           if (existing && !existing.draft) {
             throw new Error(`v${target} already exists as a pre-release; Realeco tags must be stable releases.`);
           }
-          if (latest && compareVersions(targetParts, parse(latest.tag_name)) <= 0) {
+          if (latest && compareVersions(target, latest.tag_name) <= 0) {
             throw new Error(`Realeco version ${target} must be higher than published ${latest.tag_name}.`);
           }
           fs.appendFileSync(process.env.GITHUB_OUTPUT, `version=${target}\ntag=v${target}\nversion_valid=true\nshould_build=true\n`);
@@ -262,7 +265,7 @@ jobs:
   publish-aur:
     name: Publish AUR package
     needs: validate-release
-    if: needs.validate-release.outputs.version_valid == 'true'
+    if: github.repository != 'Honahec/folia-major' && needs.validate-release.outputs.version_valid == 'true'
     runs-on: ubuntu-latest
 
     steps:

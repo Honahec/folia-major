@@ -4,6 +4,16 @@
   "main": "./worker/index.ts",
   "compatibility_date": "2026-04-02",
   "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "FOLIA_SHARED_LOGIN_DB",
+      "database_name": "folia-shared-login",
+      "database_id": "41905ae2-37e3-4ad9-bc09-b175a1fb473a",
+      "migrations_dir": "migrations/sharedLogin"
+    }
+  ],
+  "triggers": { "crons": ["*/10 * * * *"] },
+  "routes": [{ "pattern": "music.honahec.cc", "custom_domain": true }],
   "define": {
     "process.env.NODE_ENV": "\"production\"",
     "process.env.JEST_WORKER_ID": "undefined",

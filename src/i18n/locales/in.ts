@@ -4339,6 +4339,21 @@ export default {
         "description": "Setelah masuk, playlist pribadi buatan Anda kini dapat memuat lagu dengan paging sungguhan. Backend yang di-host sendiri harus memakai qq-music-api 3.1.2 atau lebih baru; backend lama beralih otomatis, dan playlist yang tidak dapat dibaca kini menjelaskan bahwa playlist itu tidak publik, alih-alih tampil kosong tanpa keterangan."
       }
     },
+    "v0_7_29_fork_1": {
+      "intro": "Rilis Folia ini berbasis v0.7.29.",
+      "sharedLogin": {
+        "title": "Hubungkan perangkatmu",
+        "description": "Gunakan token sinkronisasi pribadi untuk menghubungkan Folia di desktop dan web."
+      },
+      "musicAccounts": {
+        "title": "Pindai sekali untuk tiap layanan",
+        "description": "Bagikan login NetEase Cloud Music dan QQ Music ke perangkat yang terhubung."
+      },
+      "worker": {
+        "title": "Dihosting di Cloudflare",
+        "description": "Buka music.honahec.cc di peramban atau masukkan alamatnya di desktop."
+      }
+    },
     "v0_7_29": {
       "intro": "Selamat datang di 0.7.29, Feynman Update—sebuah pembaruan besar. FM Pribadi kini punya dinding radio sendiri, ada gaya lirik baru bernama Metaphor, dan pemeriksaan performa memberi tahu seberapa tinggi kualitas visual yang sanggup dijalankan komputer ini.",
       "radioWall": {

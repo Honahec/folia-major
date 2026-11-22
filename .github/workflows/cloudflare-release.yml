@@ -1,0 +1,71 @@
+name: Deploy Cloudflare Worker
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Published fork release tag to deploy'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.repository == 'Honahec/folia-major' && (github.event_name == 'workflow_dispatch' || !github.event.release.prerelease)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      CLOUDFLARE_ACCOUNT_ID: 7e67300937569409948751f02dd3f0e2
+    steps:
+      - name: Verify the published fork release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-fork\.[1-9][0-9]*$ ]]
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease \
+            --jq 'if .isDraft or .isPrerelease then error("Publish the fork release before deploying") else "Release verified" end'
+
+      - name: Check out the released source
+        uses: actions/checkout@v6
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Build the released Web app
+        env:
+          VITE_QQ_API_BASE: /api/qq
+          WORKERS_CI: '1'
+          APP_VERSION_LABEL: Folia Fork
+        run: |
+          node -e 'if ("v" + require("./package.json").version !== process.env.RELEASE_TAG) process.exit(1)'
+          npm ci
+          npm exec -- vite build
+
+      - name: Apply D1 migrations and deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          latest_release="$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)"
+          if [[ "$RELEASE_TAG" != "$latest_release" ]]; then
+            echo "Skipping $RELEASE_TAG because $latest_release is the latest release."
+            exit 0
+          fi
+          test -n "$CLOUDFLARE_API_TOKEN"
+          npx --yes wrangler@4.165.0 d1 migrations apply folia-shared-login --remote
+          npx --yes wrangler@4.165.0 deploy

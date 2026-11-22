@@ -7,6 +7,7 @@ const { validateRealecoReleaseMetadata } = require('../../shared/realecoReleaseM
         commitMessage: string;
         releaseFileContent: string;
         packageVersion: string;
+        forkRelease?: boolean;
     }) => string;
 };
 
@@ -19,6 +20,17 @@ const validMetadata = {
 describe('Realeco release metadata', () => {
     it('accepts a matching commit message, release file, and package version', () => {
         expect(validateRealecoReleaseMetadata(validMetadata)).toBe('0.6.1');
+    });
+
+    it('accepts matching fork releases only in the fork workflow', () => {
+        const metadata = {
+            commitMessage: 'release: v0.7.29-fork.1',
+            releaseFileContent: '0.7.29-fork.1\n',
+            packageVersion: '0.7.29-fork.1',
+        };
+        expect(validateRealecoReleaseMetadata({ ...metadata, forkRelease: true })).toBe('0.7.29-fork.1');
+        expect(() => validateRealecoReleaseMetadata(metadata)).toThrow();
+        expect(() => validateRealecoReleaseMetadata({ ...metadata, forkRelease: true, commitMessage: 'release: v0.7.29-fork.2' })).toThrow();
     });
 
     it.each([

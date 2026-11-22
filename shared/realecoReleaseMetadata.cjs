@@ -2,9 +2,19 @@
 // Validates the three version sources that authorize a Realeco release.
 
 const RELEASE_VERSION_PATTERN = /^[0-9]+\.[0-9]+\.[0-9]+$/;
+const FORK_VERSION_PATTERN = /^[0-9]+\.[0-9]+\.[0-9]+-fork\.[1-9][0-9]*$/;
 const RELEASE_FILE_PATTERN = /^[0-9]+\.[0-9]+\.[0-9]+\r?\n?$/;
 
-function validateRealecoReleaseMetadata({ commitMessage, releaseFileContent, packageVersion }) {
+function validateRealecoReleaseMetadata({ commitMessage, releaseFileContent, packageVersion, forkRelease = false }) {
+  if (forkRelease) {
+    if (!FORK_VERSION_PATTERN.test(packageVersion)
+        || ![packageVersion, packageVersion + '\n'].includes(releaseFileContent)
+        || commitMessage !== `release: v${packageVersion}`) {
+      throw new Error('Fork releases require matching A.B.C-fork.N metadata and an exact release commit.');
+    }
+    return packageVersion;
+  }
+
   if (!RELEASE_FILE_PATTERN.test(releaseFileContent)) {
     throw new Error('realeco-release must contain exactly one A.B.C version line.');
   }
