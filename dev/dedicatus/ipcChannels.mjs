@@ -55,6 +55,8 @@ export const IPC_CHANNELS = {
     'has-audio-cache': { level: 'first-party', why: '按歌问有没有缓存，等于听歌记录（firstParty）' },
     'has-local-cover-asset': { level: 'first-party', why: '查本地歌曲封面（firstParty）' },
     'key-capture-active': { level: 'any', why: '只改调用者自己那个窗口的菜单键拦截' },
+    'save-ai-profile': { level: 'first-party', why: 'Save the AI settings and any typed credentials together.' },
+    'shared-login-ai-sync': { level: 'first-party', why: 'Sync the AI profile in the main process without disclosing credentials.' },
     'shared-login-origin': { level: 'first-party', why: 'Read the connected Worker origin without exposing its device session.' },
     'shared-login-enroll': { level: 'first-party', why: 'Enroll a device and keep the credential in the main process.' },
     'shared-login-request': { level: 'first-party', why: 'Send an allowed request to the connected Worker.' },

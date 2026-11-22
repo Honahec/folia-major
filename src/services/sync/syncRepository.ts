@@ -254,7 +254,7 @@ export const saveSyncedThemeForSong = async (
     const fingerprint = createSongSyncFingerprint(song);
     const updatedAt = new Date().toISOString();
     if (fingerprint) {
-        await registerThemeSyncRecordForSong(song, source, updatedAt);
+        await registerThemeSyncRecordForSong(song, source, updatedAt, config?.deviceId ? syncAccountScope(config) : undefined);
     }
     if (!config || !fingerprint) {
         return false;
@@ -372,6 +372,11 @@ export const pushMissingLocalThemesToRemote = async (
     await hydrateLegacyNeteaseThemeSyncRecords();
     const remoteScope = syncAccountScope(config);
     const localRecords = await getThemesForSyncAccount(config);
+    if (config.deviceId) {
+        ensureSyncConfigCurrent(config);
+        await upsertThemeSyncRecords(localRecords.filter(record => !record.remoteScope)
+            .map(record => ({ ...record, remoteScope })));
+    }
     const localRegistrySignature = getLocalThemeRegistrySignature(localRecords);
     const existingWatermark = readThemeSyncWatermark();
     if (existingWatermark?.workerBaseUrl === config.workerBaseUrl && existingWatermark.deviceId === config.deviceId

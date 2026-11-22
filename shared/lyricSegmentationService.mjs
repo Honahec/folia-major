@@ -25,8 +25,7 @@ import {
 
 const DEFAULT_OPENAI_CHAT_COMPLETIONS_URL = 'https://api.openai.com/v1/chat/completions';
 const DEFAULT_OPENAI_TEMPERATURE = 0.7;
-const GEMINI_ENDPOINT =
-  'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent';
+const GEMINI_MODELS_URL = 'https://generativelanguage.googleapis.com/v1beta/models/';
 
 // An edge function has its own platform deadline, but a request with no signal can still burn the
 // whole budget on one stalled upstream and return nothing useful. Failing at a deadline we chose
@@ -229,7 +228,9 @@ const runOpenAICompatible = async (lines, env, fetchImpl) => {
 const runGemini = async (lines, env, fetchImpl) => {
   let response;
   try {
-    response = await fetchImpl(GEMINI_ENDPOINT, {
+    const model = env.GEMINI_API_MODEL?.trim().replace(/^models\//, '') || 'gemini-3-flash-preview';
+    if (!/^[\w.-]{1,256}$/.test(model)) throw new Error('Invalid Gemini model');
+    response = await fetchImpl(`${GEMINI_MODELS_URL}${model}:generateContent`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -284,7 +285,7 @@ export const readSegmentationLines = (body) => {
  * Segments the lines with whichever provider the deployment configured. Returns one boundary array
  * per input line, already validated to reproduce the input exactly.
  */
-export const segmentLyricLines = async (lines, env, fetchImpl = fetch) => {
+export const segmentLyricLines = async (lines, env, fetchImpl = fetch, logOutput = true) => {
   const preferOpenAI = env.AI_PROVIDER === 'openai' || (!env.GEMINI_API_KEY && env.OPENAI_API_KEY);
 
   if (preferOpenAI && !env.OPENAI_API_KEY) {
@@ -300,14 +301,14 @@ export const segmentLyricLines = async (lines, env, fetchImpl = fetch) => {
 
   try {
     const { boundaries, rejections } = parseSegmentationResponse(raw, lines);
-    if (rejections.length > 0) {
+    if (logOutput && rejections.length > 0) {
       console.warn(`[segment-lyrics] ${rejections.length}/${lines.length} lines rejected; first: ${rejections[0]}`);
     }
     return boundaries;
   } catch (error) {
     // The response is the only evidence of why a run was rejected, and it is gone once this
     // throws. Server logs are the one place a deployment can see it.
-    console.error('[segment-lyrics] rejected model response:', String(raw).slice(0, 4000));
+    if (logOutput) console.error('[segment-lyrics] rejected model response:', String(raw).slice(0, 4000));
     throw new SegmentationRequestError(error instanceof Error ? error.message : String(error), 502);
   }
 };

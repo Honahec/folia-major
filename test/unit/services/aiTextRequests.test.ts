@@ -92,6 +92,28 @@ describe('a theme from lyrics', () => {
         });
     });
 
+    it('uses the configured device for account AI and falls back when its session expires', async () => {
+        const origin = 'https://folia.example';
+        const deviceId = 'device-a';
+        stubWebWindow('gemini', {
+            location: { origin },
+            localStorage: { getItem: (key: string) => key === 'folia_sync_config_v1'
+                ? JSON.stringify({ enabled: true, deviceId, workerBaseUrl: origin }) : null },
+        });
+        const fetch = vi.fn()
+            .mockResolvedValueOnce(Response.json({ id: deviceId, label: 'Browser', accountId: 'alice' }))
+            .mockResolvedValueOnce(Response.json(THEME_ANSWER))
+            .mockResolvedValueOnce(Response.json({ error: 'device_required' }, { status: 401 }))
+            .mockResolvedValueOnce(Response.json(THEME_ANSWER));
+        vi.stubGlobal('fetch', fetch);
+        await generateThemeFromLyrics('la la la');
+        expect(fetch.mock.calls[1][0]).toBe('/api/shared-login/ai/theme');
+        const init = fetch.mock.calls[1][1] as RequestInit;
+        expect(new Headers(init.headers).get('X-Folia-Device')).toBe(deviceId);
+        await generateThemeFromLyrics('la la la');
+        expect(fetch.mock.calls[3][0]).toBe('/api/generate-theme');
+    });
+
     it('on the web fails with the message the route answered', async () => {
         vi.spyOn(console, 'error').mockImplementation(() => {});
         stubWebWindow('gemini');
@@ -175,7 +197,7 @@ describe('a lyric segmentation', () => {
     });
 
     it('on the web posts the lines to /api/segment-lyrics, with the caller\'s abort signal', async () => {
-        vi.stubGlobal('window', {});
+        stubWebWindow('gemini');
         // A null row is a line the server rejected; it keeps the default split.
         const requests = recordFetch(jsonAnswer({ lines: [['la ', 'la'], null] }));
         const { signal } = new AbortController();
@@ -195,7 +217,7 @@ describe('a lyric segmentation', () => {
     });
 
     it('on the web fails with the message the route answered, or a fixed one', async () => {
-        vi.stubGlobal('window', {});
+        stubWebWindow('gemini');
 
         recordFetch(jsonAnswer({ error: 'GEMINI_API_KEY is not configured' }, 500));
         await expect(segmentLyricsWithAi(['la la'])).rejects.toThrow('GEMINI_API_KEY is not configured');
@@ -208,7 +230,7 @@ describe('a lyric segmentation', () => {
         vi.stubGlobal('window', { electron: { segmentLyrics: vi.fn().mockResolvedValue([['la ', 'la']]) } });
         await expect(segmentLyricsWithAi(['la la', 'do re'])).rejects.toThrow('Segmentation response did not cover every line');
 
-        vi.stubGlobal('window', {});
+        stubWebWindow('gemini');
         recordFetch(jsonAnswer({ lines: [['la ', 'la']] }));
         await expect(segmentLyricsWithAi(['la la', 'do re'])).rejects.toThrow('Segmentation response did not cover every line');
     });

@@ -26,8 +26,8 @@ type Kind = keyof typeof NAMES;
 
 // Files other than the door that may name some of these, and why.
 const ALLOWED: Record<string, Kind[]> = {
-    // Declares the bridge's methods for TypeScript.
-    'src/vite-env.d.ts': ['bridge'],
+    // Declares the bridge methods and public AI profile shape for TypeScript.
+    'src/vite-env.d.ts': ['bridge', 'setting'],
     // Reads which service the web deployment chose (the build's VITE_AI_PROVIDER).
     'src/services/runtimeConfig.ts': ['setting'],
     // The settings form: it shows and stores the AI settings under their stored names, and shows

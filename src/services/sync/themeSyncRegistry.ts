@@ -148,6 +148,7 @@ export const registerThemeSyncRecordForSong = async (
     song: SongResult | null,
     source: SyncedThemeSource,
     updatedAt = new Date().toISOString(),
+    remoteScope?: string,
 ) => {
     const fingerprint = createSongSyncFingerprint(song);
     if (!fingerprint || song?.id == null) {
@@ -159,6 +160,7 @@ export const registerThemeSyncRecordForSong = async (
         cacheKey: `${DUAL_THEME_CACHE_PREFIX}${getPlaybackSongKey(song)}`,
         updatedAt,
         source,
+        remoteScope,
     };
     await upsertThemeSyncRecord(record);
     return record;

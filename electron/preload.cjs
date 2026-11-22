@@ -213,6 +213,8 @@ contextBridge.exposeInMainWorld('electron', {
     ytmRequest: (operation, params) => ipcRenderer.invoke('ytm-api-request', operation, params),
     appleMusicRequest: (operation, params) => ipcRenderer.invoke('apple-music-request', operation, params),
     spotifyRequest: (operation, params) => ipcRenderer.invoke('spotify-api-request', operation, params),
+    saveAiProfile: (profile) => ipcRenderer.invoke('save-ai-profile', profile),
+    syncAiProfile: (origin, deviceId) => ipcRenderer.invoke('shared-login-ai-sync', origin, deviceId),
     getSharedLoginOrigin: () => ipcRenderer.invoke('shared-login-origin'),
     enrollSharedLogin: (url, token, label) => ipcRenderer.invoke('shared-login-enroll', url, token, label),
     requestSharedLogin: (path, method, body, expectedDevice, connectionId) => ipcRenderer.invoke('shared-login-request', path, method, body, expectedDevice, connectionId),

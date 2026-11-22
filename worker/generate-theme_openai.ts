@@ -252,8 +252,8 @@ const extractResponseContentText = (message: { content?: unknown; refusal?: unkn
  * next. Any other failure is thrown as the provider's own error line.
  */
 const requestThemeContent = async (
-    { apiUrl, apiKey, model, adapterId, temperature, systemPrompt, sourcePrompt }:
-    { apiUrl: string; apiKey: string; model: string; adapterId: string; temperature: number; systemPrompt: string; sourcePrompt: string; },
+    { apiUrl, apiKey, model, adapterId, temperature, systemPrompt, sourcePrompt, privateProfile }:
+    { apiUrl: string; apiKey: string; model: string; adapterId: string; temperature: number; systemPrompt: string; sourcePrompt: string; privateProfile: boolean; },
 ) => {
     const adapter = getAiAdapter(adapterId)!;
     return runAttempts({
@@ -262,7 +262,7 @@ const requestThemeContent = async (
         url: apiUrl,
         model,
         attempts: adapter.attempts('theme', model),
-        log: (line: string) => console.log(line),
+        log: (line: string) => { if (!privateProfile) console.log(line); },
         describeEmpty: (result) => (result.exhausted
             ? `Model "${model}" used its entire output budget on reasoning and returned no theme.`
             : 'Failed to generate theme JSON'),
@@ -289,6 +289,7 @@ const requestThemeContent = async (
                         Authorization: `Bearer ${apiKey}`,
                     },
                     signal: AbortSignal.timeout(120_000),
+                    ...(privateProfile ? { redirect: 'error' as const } : {}),
                 },
             });
 
@@ -298,7 +299,7 @@ const requestThemeContent = async (
                 const errorText = formatOpenAICompatibleErrorText(response, rawText);
                 // A warning, not an error: the runner may still move on to the next attempt. A final
                 // failure is logged by the handler ("Error generating theme").
-                console.warn(`[ai] theme ${attempt.label} failed: ${errorText}`);
+                if (!privateProfile) console.warn(`[ai] theme ${attempt.label} failed: ${errorText}`);
                 return withErrorHint(adapter, {
                     ok: false,
                     status: response.status,
@@ -322,7 +323,7 @@ const requestThemeContent = async (
     });
 };
 
-export async function handleGenerateOpenAITheme(request: Request, env: WorkerEnv) {
+export async function handleGenerateOpenAITheme(request: Request, env: WorkerEnv, privateProfile = false) {
     if (request.method !== 'POST') {
         return Response.json({ error: 'Method Not Allowed' }, { status: 405 });
     }
@@ -364,7 +365,7 @@ export async function handleGenerateOpenAITheme(request: Request, env: WorkerEnv
         const sourcePrompt = buildThemeSourcePrompt(snippet, isPureMusic, songTitle);
 
         const content = await requestThemeContent({
-            apiUrl, apiKey, model, adapterId: connection.adapterId, temperature, systemPrompt, sourcePrompt,
+            apiUrl, apiKey, model, adapterId: connection.adapterId, temperature, systemPrompt, sourcePrompt, privateProfile,
         });
 
         // Attempt to parse JSON
@@ -379,7 +380,7 @@ export async function handleGenerateOpenAITheme(request: Request, env: WorkerEnv
         try {
             dualTheme = sanitizeDualTheme(JSON.parse(jsonStr));
         } catch (e) {
-            console.error('Failed to parse JSON from AI response:', jsonStr);
+            if (!privateProfile) console.error('Failed to parse JSON from AI response:', jsonStr);
             throw new Error('Invalid JSON response from AI');
         }
 
@@ -391,6 +392,7 @@ export async function handleGenerateOpenAITheme(request: Request, env: WorkerEnv
 
         return Response.json(dualTheme);
     } catch (error) {
+        if (privateProfile) return Response.json({ error: 'AI service request failed' }, { status: 502 });
         console.error('Error generating theme:', error);
         const errorMessage = error instanceof Error ? error.message : 'Internal Server Error';
         return Response.json({ error: errorMessage }, { status: 500 });

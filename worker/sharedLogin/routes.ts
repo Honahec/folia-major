@@ -1,3 +1,5 @@
+import { handleAccountAi } from '../sync/accountAi.ts';
+import { handleAiProfile, type AiProfileEnv } from '../sync/aiProfile.ts';
 import { handleUserSync } from '../sync/routes.ts';
 import {
     getSharedLoginDevice, handleSharedLoginDevices, isSharedLoginRequestAllowed,
@@ -6,7 +8,7 @@ import {
 
 // Mount the account service only when the deployment has its own D1 binding.
 
-export type SharedLoginEnv = { FOLIA_SHARED_LOGIN_DB?: SharedLoginDb };
+export type SharedLoginEnv = { FOLIA_SHARED_LOGIN_DB?: SharedLoginDb } & AiProfileEnv;
 
 export interface SharedLoginProvider<Env extends SharedLoginEnv> {
     id: string;
@@ -31,6 +33,12 @@ export const createSharedLoginRoutes = <Env extends SharedLoginEnv>(providers: r
             }
             if (device && !discovery && request.headers.get('X-Folia-Device') !== device.id) {
                 return sharedLoginError('device_changed', 409);
+            }
+            if (path === '/ai/settings') {
+                return device ? await handleAiProfile(request, db, device, env) : sharedLoginError('device_required', 401);
+            }
+            if (path === '/ai/theme' || path === '/ai/segment') {
+                return device ? await handleAccountAi(request, db, device, env, path) : sharedLoginError('device_required', 401);
             }
             if (path.startsWith('/sync/')) {
                 return device ? await handleUserSync(request, db, device.userId, path.slice('/sync'.length))

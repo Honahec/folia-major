@@ -61,9 +61,10 @@ ${snippet}`;
 
 type WorkerEnv = {
     GEMINI_API_KEY?: string;
+    GEMINI_API_MODEL?: string;
 };
 
-export async function handleGenerateTheme(request: Request, env: WorkerEnv) {
+export async function handleGenerateTheme(request: Request, env: WorkerEnv, privateProfile = false) {
     if (request.method !== 'POST') {
         return Response.json({ error: 'Method Not Allowed' }, { status: 405 });
     }
@@ -86,13 +87,15 @@ export async function handleGenerateTheme(request: Request, env: WorkerEnv) {
             return Response.json({ error: 'Server configuration error' }, { status: 500 });
         }
 
+        const model = env.GEMINI_API_MODEL?.trim().replace(/^models\//, '') || 'gemini-3-flash-preview';
+        if (!/^[\w.-]{1,256}$/.test(model)) return Response.json({ error: 'Invalid Gemini model' }, { status: 400 });
         const ai = new GoogleGenAI({ apiKey });
 
         // Limit text to avoid token limits if lyrics are huge
         const snippet = lyricsText.slice(0, 2000);
 
         const response = await ai.models.generateContent({
-            model: 'gemini-3-flash-preview',
+            model,
             contents: [
                 {
                     role: 'user',
@@ -188,6 +191,7 @@ export async function handleGenerateTheme(request: Request, env: WorkerEnv) {
 
         return Response.json(dualTheme);
     } catch (error) {
+        if (privateProfile) return Response.json({ error: 'AI service request failed' }, { status: 502 });
         console.error('Error generating theme:', error);
         const errorMessage = error instanceof Error ? error.message : 'Internal Server Error';
         return Response.json({ error: errorMessage }, { status: 500 });

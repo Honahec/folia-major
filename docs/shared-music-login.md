@@ -1,6 +1,6 @@
 # Folia Sync Server
 
-Use one Folia deployment for the Web/PWA and every desktop client you want to connect. QQ Music and NetEase Cloud Music support shared authorization. Each Folia user has a personal Sync Token for enrolling devices, and each enrolled device has a revocable 90-day session. The same Worker and device session sync appearance settings, AI themes, and music account authorizations. Each account has its own settings, themes, and provider sessions in D1.
+Use one Folia deployment for the Web/PWA and every desktop client you want to connect. QQ Music and NetEase Cloud Music support shared authorization. Each Folia user has a personal Sync Token for enrolling devices, and each enrolled device has a revocable 90-day session. The same Worker and device session sync appearance settings, AI themes, AI service settings, and music account authorizations. Each account has its own settings, themes, and provider sessions in D1.
 
 ## Enable it on Cloudflare
 
@@ -39,9 +39,29 @@ The same D1 binding, cron trigger, and personal Sync Tokens work for both provid
 
 Open **Settings → Connections → Sync Server**. Turn on sync, enter the Folia Worker origin and your personal Sync Token, then save. On Web/PWA, open the Folia origin directly. Devices already connected to this Worker can reuse their device session. After connecting, open the music account window and scan for each music service you want to share. QQ Music accepts WeChat and mobile QQ. Other devices for that Folia user pick up the shared NetEase authorization when opened or brought back into focus. Scan again to move an existing local sign-in to the shared service.
 
-Disconnect or revoke an individual device from the settings list. Signing out of a shared provider unlinks its authorization for that user. When the provider requires a new scan, complete it on any connected device. Scheduled renewal keeps the authorization available while clients are closed, up to the upstream session lifetime.
+Use **Rename** to change the name of the device you are using. Disconnect or revoke an individual device from the settings list. Signing out of a shared provider unlinks its authorization for that user. When the provider requires a new scan, complete it on any connected device. Scheduled renewal keeps the authorization available while clients are closed, up to the upstream session lifetime.
 
 Desktop sessions use the operating system's credential storage. On Linux without a usable secret store, the session lasts until the app exits.
+
+## Automatic sync
+
+Connected clients check for appearance, AI theme, and AI service changes on startup, right after connecting, when they return to the foreground or come back online, and every five minutes in the foreground. Appearance edits and desktop AI settings saves schedule a sync after 1.5 seconds. Newly saved AI themes use their existing immediate upload path. If you switch to a different account with an empty appearance profile, use **Sync Appearance** once to share the current device's appearance with that account.
+
+The Worker checks music sessions every ten minutes, even with every device closed. QQ becomes eligible for refresh an hour after login or its last refresh attempt. NetEase first becomes eligible after an hour, then after 12 hours for upstream responses below HTTP 500, or an hour after a network or upstream server failure.
+
+## Enable AI service sync
+
+Apply D1 migrations and keep a dedicated 32-byte encryption secret on the Worker:
+
+```sh
+openssl rand -hex 32 | wrangler secret put FOLIA_AI_SYNC_SECRET
+```
+
+Use this command when setting up AI sync for the first time. Keep the secret stable across deployments so the Worker can decrypt existing profiles. Enter or update your AI credentials in the desktop app. The encrypted account profile syncs the provider, endpoint, models, request options and API keys. The desktop system proxy toggle belongs to each device.
+
+Web and PWA can use the synced AI profile through their Folia Worker. The Worker sends requests to Gemini and OpenAI-compatible HTTPS endpoints listed in Folia's provider presets. Desktop clients can also sync and use custom endpoints. An account with no AI profile uses the deployment's existing Web AI configuration.
+
+The desktop release workflow publishes the complete stable release and calls the Worker deployment workflow. To recover an interrupted deployment, re-run the failed jobs or run **Deploy Cloudflare Worker** with the published tag.
 
 ## Existing standalone Sync Server
 

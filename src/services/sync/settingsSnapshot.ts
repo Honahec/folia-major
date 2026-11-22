@@ -30,9 +30,17 @@ export const readSyncableSettingsState = (): SyncableSettingsState => ({
     ...useThemeSettingsStore.getState(),
 });
 
-export const buildSyncedVisualSettings = (state: SyncableSettingsState): SyncedVisualSettings => ({
+export const watchSyncableSettings = (listener: () => void) => {
+    const unsubscribe = [
+        useVisualizerSettingsStore, useTypographySettingsStore, useLyricSettingsStore,
+        useHomeLayoutSettingsStore, usePlayerChromeSettingsStore, useThemeSettingsStore,
+    ].map(store => store.subscribe(listener));
+    return () => unsubscribe.forEach(stop => stop());
+};
+
+export const buildSyncedVisualSettings = (state: SyncableSettingsState, omitRandomChoice = false): SyncedVisualSettings => ({
     followSystemTheme: state.followSystemTheme,
-    visualizerMode: state.visualizerMode,
+    visualizerMode: omitRandomChoice && state.randomVisualizerModePerSong ? undefined : state.visualizerMode,
     randomVisualizerModePerSong: state.randomVisualizerModePerSong,
     randomVisualizerModes: state.randomVisualizerModes,
     visualizerBackgroundMode: state.visualizerBackgroundMode,
@@ -84,14 +92,15 @@ export const buildSyncedVisualSettings = (state: SyncableSettingsState): SyncedV
 export const buildSyncedSettingsRecord = (
     state: SyncableSettingsState,
     updatedAt = new Date().toISOString(),
+    omitRandomChoice = false,
 ): SyncedSettingsRecord => ({
     schemaVersion: SYNC_SCHEMA_VERSION,
     updatedAt,
-    data: buildSyncedVisualSettings(state),
+    data: buildSyncedVisualSettings(state, omitRandomChoice),
 });
 
 export const getSyncedSettingsSignature = (state: SyncableSettingsState) => (
-    JSON.stringify(buildSyncedVisualSettings(state))
+    JSON.stringify(buildSyncedVisualSettings(state, true))
 );
 
 export const applySyncedVisualSettings = (

@@ -135,7 +135,7 @@ function createAiCredentialStore({ store, safeStorage, platform = process.platfo
   };
 
   /**
-   * The only way key material leaves this module. An OpenAI-compatible key whose endpoint has
+   * The key for making AI requests. An OpenAI-compatible key whose endpoint has
    * changed reads as missing (and is kept, so pointing the URL back restores it); the UI then asks
    * for the key again, and AI requests refuse to run instead of sending it to the new host.
    */
@@ -159,7 +159,7 @@ function createAiCredentialStore({ store, safeStorage, platform = process.platfo
   const isConfigured = (key) => Boolean(get(key));
 
   /** Saves a key, or clears it when `rawValue` is empty. */
-  const set = (key, rawValue) => {
+  const set = (key, rawValue, boundEndpoint = openAIEndpointOf(store.get('OPENAI_API_URL'))) => {
     if (!isAiCredentialKey(key)) {
       store.set(key, rawValue);
       return;
@@ -176,7 +176,7 @@ function createAiCredentialStore({ store, safeStorage, platform = process.platfo
     }
     if (key === 'OPENAI_API_KEY') {
       // Whoever supplies the key itself may choose where it goes; the form saves OPENAI_API_URL first.
-      store.set(OPENAI_API_KEY_ENDPOINT_KEY, openAIEndpointOf(store.get('OPENAI_API_URL')));
+      store.set(OPENAI_API_KEY_ENDPOINT_KEY, boundEndpoint);
     }
     if (canEncrypt()) {
       try {
@@ -209,7 +209,7 @@ function createAiCredentialStore({ store, safeStorage, platform = process.platfo
     for (const key of AI_CREDENTIAL_KEYS) {
       const plain = readPlain(key);
       if (plain) {
-        set(key, plain);
+        set(key, plain, store.get(OPENAI_API_KEY_ENDPOINT_KEY));
       }
     }
   };
@@ -246,8 +246,15 @@ function createAiCredentialStore({ store, safeStorage, platform = process.platfo
     return { apiKey: saved };
   };
 
+  // A profile carries the original binding. A temporarily unreadable key cannot be uploaded.
+  const readForSync = (key) => {
+    const value = readCredential(key);
+    return value || (!readPlain(key) && !readSealed(key) ? '' : null);
+  };
+
   return {
     get,
+    readForSync,
     set,
     migrate,
     isConfigured,

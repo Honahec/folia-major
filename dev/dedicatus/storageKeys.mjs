@@ -8,6 +8,7 @@
 export const STORAGE_KEYS = [
     'main:AI_PROVIDER',
     'main:AI_PROVIDER_PRESET',
+    'main:AI_SYNC_STATE',
     'main:APP_LOCALE',
     'main:BACKGROUND_THROTTLING',
     'main:BODIAN_DEVICE_ID',
@@ -163,6 +164,7 @@ export const STORAGE_KEYS = [
     'web:folia_stem_mixer_gains',
     'web:folia_sync_config_v1',
     'web:folia_sync_local_settings_updated_at_v1',
+    'web:folia_sync_pending_settings_v1',
     'web:folia_sync_status_v1',
     'web:folia_sync_theme_registry_v1',
     'web:folia_sync_theme_watermark_v1',

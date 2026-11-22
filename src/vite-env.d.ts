@@ -1,7 +1,13 @@
 /// <reference types="vite/client" />
 
 import type { ModClearCacheResult, ModExportProgress, ModFfmpegStatus, ModLogEntry, ModMainCallStats, ModRpcMessage, ModRuntimeInfo, ModRuntimeSnapshot, ModSecretChange, ModStorageUsageResult } from './mods/types';
+import type { AiSyncProfile } from '../shared/ai/syncProfile.cjs';
 import type { PerfCheckProcessMemory, PerfCheckSettings } from './components/perfCheck/perfCheckTypes';
+
+type PublicAiProfile = Partial<Omit<AiSyncProfile, 'GEMINI_API_KEY' | 'OPENAI_API_KEY'>> & {
+  AI_API_KEYS_CONFIGURED?: Partial<Record<'GEMINI_API_KEY' | 'OPENAI_API_KEY', boolean>>;
+  OPENAI_API_KEY_ENDPOINT?: string;
+};
 
 declare global {
   const __COMMIT_HASH__: string;
@@ -822,6 +828,8 @@ declare global {
     electron?: {
       getSharedLoginOrigin?: () => Promise<string | null>;
       enrollSharedLogin?: (url: string, token: string, label: string) => Promise<{ status: number; body: unknown }>;
+      saveAiProfile?: (profile: Omit<AiSyncProfile, 'OPENAI_API_KEY_ENDPOINT'>) => Promise<PublicAiProfile>;
+      syncAiProfile?: (origin: string, deviceId: string) => Promise<{ status: string }>;
       requestSharedLogin?: (path: string, method: string, body?: string, expectedDevice?: string, connectionId?: string) => Promise<{ status: number; body: unknown; connectionId?: string | null }>;
       webUtils?: {
         /** Resolves the OS path of a dropped File (File.path was removed in modern Electron). */

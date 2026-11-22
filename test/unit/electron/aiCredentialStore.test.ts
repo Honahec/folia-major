@@ -65,6 +65,19 @@ describe('AI credential store', () => {
         expect(reopened.settingsView.get('OPENAI_API_KEY')).toBe('sk-secret-123');
     });
 
+    it('preserves the endpoint binding when a recovered keyring seals a plaintext key', () => {
+        const store = createStore({
+            OPENAI_API_URL: 'https://another.example/v1',
+            OPENAI_API_KEY_ENDPOINT: 'https://api.openai.com',
+            OPENAI_API_KEY: 'sk-bound-to-openai',
+        });
+        const credentials = createAiCredentialStore({ store, safeStorage: createSafeStorage(), platform: 'darwin' });
+        credentials.migrate();
+        expect(store.values.get('OPENAI_API_KEY_ENDPOINT')).toBe('https://api.openai.com');
+        expect(store.values.has('OPENAI_API_KEY')).toBe(false);
+        expect(credentials.get('OPENAI_API_KEY')).toBe('');
+    });
+
     it('migrates plaintext keys written by older versions', () => {
         const store = createStore({ GEMINI_API_KEY: 'gemini-plain', AI_PROVIDER: 'gemini' });
         const credentials = createAiCredentialStore({ store, safeStorage: createSafeStorage(), platform: 'darwin' });

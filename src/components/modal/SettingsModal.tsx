@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, startTransition } from 'react';
+import { AI_SETTINGS_CHANGED, AI_SETTINGS_SYNCED } from '../../services/sync/syncedAi';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { MotionValue } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
@@ -490,6 +491,33 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     }, []);
 
     useEffect(() => {
+        const refreshAiSettings = () => {
+            void window.electron?.getSettings().then((settings: Awaited<ReturnType<NonNullable<NonNullable<Window['electron']>['saveAiProfile']>>> | null) => {
+                if (!settings) return;
+                const { AI_API_KEYS_CONFIGURED: keys, OPENAI_API_KEY_ENDPOINT: endpoint } = settings;
+                setSavedElectronAiCredentials({
+                    AI_PROVIDER: settings.AI_PROVIDER === 'openai' ? 'openai' : 'gemini',
+                    GEMINI_API_KEY: keys?.GEMINI_API_KEY === true,
+                    OPENAI_API_KEY: keys?.OPENAI_API_KEY === true,
+                    OPENAI_API_KEY_ENDPOINT: typeof endpoint === 'string' ? endpoint : null,
+                });
+                setElectronSettings(previous => previous.GEMINI_API_KEY || previous.OPENAI_API_KEY ? previous : ({
+                    ...previous,
+                    AI_PROVIDER: settings.AI_PROVIDER === 'openai' ? 'openai' : 'gemini',
+                    AI_PROVIDER_PRESET: settings.AI_PROVIDER_PRESET ?? '',
+                    GEMINI_API_MODEL: settings.GEMINI_API_MODEL ?? '',
+                    OPENAI_API_MODEL: settings.OPENAI_API_MODEL ?? '',
+                    OPENAI_API_URL: settings.OPENAI_API_URL ?? '',
+                    OPENAI_API_TEMPERATURE: (settings.OPENAI_API_TEMPERATURE ?? '').trim() || DEFAULT_OPENAI_TEMPERATURE,
+                    OPENAI_API_STREAM: settings.OPENAI_API_STREAM === true,
+                }));
+            }).catch((error: unknown) => console.warn('[AiSettings] Could not refresh settings', error));
+        };
+        window.addEventListener(AI_SETTINGS_SYNCED, refreshAiSettings);
+        return () => window.removeEventListener(AI_SETTINGS_SYNCED, refreshAiSettings);
+    }, []);
+
+    useEffect(() => {
         if (!window.electron?.onUpdateStatusChanged) {
             return;
         }
@@ -537,37 +565,35 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     };
 
     const saveElectronSettings = async () => {
-        if ((window as any).electron) {
-            // What is saved is the number that was typed, so "0,7" is kept as 0.7 and the main process
-            // reads it as that; anything that is not a number from 0 to 2 falls back to the default.
+        const electron = window.electron;
+        if (electron?.saveAiProfile) {
+            // Read a localized number and let the main process save the whole AI profile together.
             const configuredTemperature = parseNumberText(electronSettings.OPENAI_API_TEMPERATURE);
             const temperature = configuredTemperature !== null && configuredTemperature >= 0 && configuredTemperature <= 2
                 ? String(configuredTemperature)
                 : DEFAULT_OPENAI_TEMPERATURE;
             setElectronSaveStatus('saving');
             setElectronSettings(prev => ({ ...prev, OPENAI_API_TEMPERATURE: temperature }));
-            // Only a newly typed key is sent; an empty field keeps the saved one (clearing is its own action).
             const geminiKeyDraft = electronSettings.GEMINI_API_KEY.trim();
             const openaiKeyDraft = electronSettings.OPENAI_API_KEY.trim();
-            if (geminiKeyDraft) {
-                await (window as any).electron.saveSettings('GEMINI_API_KEY', geminiKeyDraft);
-            }
-            // URL before key: a new OpenAI-compatible key is bound to the URL saved at that moment.
-            await (window as any).electron.saveSettings('OPENAI_API_URL', electronSettings.OPENAI_API_URL);
-            if (openaiKeyDraft) {
-                await (window as any).electron.saveSettings('OPENAI_API_KEY', openaiKeyDraft);
-            }
-            await (window as any).electron.saveSettings('OPENAI_API_MODEL', electronSettings.OPENAI_API_MODEL);
-            await (window as any).electron.saveSettings('OPENAI_API_TEMPERATURE', temperature);
-            await (window as any).electron.saveSettings('OPENAI_API_STREAM', electronSettings.OPENAI_API_STREAM === true);
-            await (window as any).electron.saveSettings('GEMINI_API_MODEL', electronSettings.GEMINI_API_MODEL);
-            await (window as any).electron.saveSettings('AI_PROVIDER_PRESET', electronSettings.AI_PROVIDER_PRESET);
-            await (window as any).electron.saveSettings('AI_PROVIDER', electronSettings.AI_PROVIDER);
-            await (window as any).electron.saveSettings('USE_SYSTEM_PROXY_FOR_AI', electronSettings.USE_SYSTEM_PROXY_FOR_AI);
-            await (window as any).electron.saveSettings('ENABLE_UPDATE_CHECK', electronSettings.ENABLE_UPDATE_CHECK);
-            await (window as any).electron.saveSettings('ENABLE_AUTO_UPDATE', electronSettings.ENABLE_AUTO_UPDATE);
-            await (window as any).electron.saveSettings('UPDATE_CHANNEL', electronSettings.UPDATE_CHANNEL);
-            const savedSettings = await (window as any).electron.saveSettings('DISCORD_RICH_PRESENCE_ENABLED', electronSettings.DISCORD_RICH_PRESENCE_ENABLED);
+            const savedSettings = await electron.saveAiProfile({
+                AI_PROVIDER: electronSettings.AI_PROVIDER === 'openai' ? 'openai' : 'gemini',
+                AI_PROVIDER_PRESET: electronSettings.AI_PROVIDER_PRESET,
+                GEMINI_API_KEY: geminiKeyDraft,
+                GEMINI_API_MODEL: electronSettings.GEMINI_API_MODEL,
+                OPENAI_API_KEY: openaiKeyDraft,
+                OPENAI_API_URL: electronSettings.OPENAI_API_URL,
+                OPENAI_API_MODEL: electronSettings.OPENAI_API_MODEL,
+                OPENAI_API_TEMPERATURE: temperature,
+                OPENAI_API_STREAM: electronSettings.OPENAI_API_STREAM === true,
+            }).catch((error: unknown) => {
+                console.warn('[AiSettings] Could not save settings', error);
+                setElectronSaveStatus('idle');
+                return null;
+            });
+            if (!savedSettings) return;
+            await electron.saveSettings('USE_SYSTEM_PROXY_FOR_AI', electronSettings.USE_SYSTEM_PROXY_FOR_AI);
+            window.dispatchEvent(new Event(AI_SETTINGS_CHANGED));
             const configuredKeys = savedSettings?.AI_API_KEYS_CONFIGURED;
             setSavedElectronAiCredentials({
                 AI_PROVIDER: electronSettings.AI_PROVIDER === 'openai' ? 'openai' : 'gemini',
@@ -593,6 +619,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             return;
         }
         const settings = await window.electron.saveSettings(key, '');
+        window.dispatchEvent(new Event(AI_SETTINGS_CHANGED));
         setSavedElectronAiCredentials(prev => ({
             ...prev,
             [key]: settings?.AI_API_KEYS_CONFIGURED?.[key] === true,

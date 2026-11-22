@@ -80,11 +80,26 @@ const createSharedLoginDevice = ({ userData, safeStorage, fetch }) => {
     return {
         origin: () => load()?.origin ?? null,
         enroll,
+        async aiProfileClient(origin, id) {
+            const entry = load();
+            if (!entry || entry.origin !== origin || typeof id !== 'string') return null;
+            const isCurrent = () => entry === current;
+            const status = await send(entry.origin, '/device', 'GET', undefined, entry.token);
+            if (!isCurrent() || status.status !== 200 || status.body?.id !== id
+                || typeof status.body.accountId !== 'string') return null;
+            return {
+                accountId: status.body.accountId,
+                isCurrent,
+                request: (method, body) => isCurrent()
+                    ? send(entry.origin, '/ai/settings', method, body, entry.token, id)
+                    : null,
+            };
+        },
         async request(path, method, body, expectedDevice, connectionId) {
             const syncWrite = typeof path === 'string' && (path === '/sync/settings' || path === '/sync/themes/put');
             const maxBodyLength = syncWrite ? 1_500_000 : 64_000;
             const allowsBody = method === 'POST' || (method === 'PUT' && path === '/sync/settings');
-            if (typeof path !== 'string' || !/^\/(?:device(?:s(?:\/[a-f0-9-]{36})?)?|[a-z][a-z0-9-]*\/[a-zA-Z0-9/_-]+)(?:\?[^#]*)?$/.test(path)
+            if (typeof path !== 'string' || path.split('?')[0] === '/ai/settings' || !/^\/(?:device(?:s(?:\/[a-f0-9-]{36})?)?|[a-z][a-z0-9-]*\/[a-zA-Z0-9/_-]+)(?:\?[^#]*)?$/.test(path)
                 || (!['GET', 'POST', 'DELETE'].includes(method) && !allowsBody)
                 || (connectionId !== undefined && (typeof connectionId !== 'string' || !/^[a-f0-9-]{36}$/.test(connectionId)))
                 || (expectedDevice !== undefined && (typeof expectedDevice !== 'string' || !/^[a-f0-9-]{36}$/.test(expectedDevice)))

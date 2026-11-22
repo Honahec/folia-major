@@ -6920,13 +6920,14 @@ ipcMain.handle('save-settings', firstParty('save-settings', (event, key, value) 
   }
   // The HiFi key is the old home of the approved mpv path (now in a file of main's own): nothing
   // reads it any more, and the renderer has no business writing it.
-  if (key === 'DISCORD_RICH_PRESENCE_APPLICATION_ID' || isReservedAiCredentialKey(key) || isReservedHifiSettingKey(key)) {
+  if (key === 'DISCORD_RICH_PRESENCE_APPLICATION_ID' || (key === AI_SYNC_STATE_KEY || key.startsWith(AI_SYNC_STATE_KEY + '.')) || isReservedAiCredentialKey(key) || isReservedHifiSettingKey(key)) {
     return getPublicSettings();
   }
   if (isAiCredentialKey(key)) {
     // Only a string is a key; '' is the explicit clear. Anything else must not wipe a saved key.
     if (typeof value === 'string') {
       aiCredentials.set(key, value);
+      aiProfileSync.markChanged(key);
     }
     return getPublicSettings();
   }
@@ -6970,7 +6971,9 @@ ipcMain.handle('save-settings', firstParty('save-settings', (event, key, value) 
   ) {
     nextValue = Boolean(value);
   }
+  const previousAiValue = store.get(key);
   store.set(key, nextValue);
+  if (previousAiValue !== nextValue) aiProfileSync.markChanged(key);
 
   if (key === BACKGROUND_THROTTLING_SETTING_KEY || key === WALLPAPER_MODE_SETTING_KEY) {
     backgroundThrottling.refresh();
@@ -7404,12 +7407,21 @@ ipcMain.handle('clear-local-cover-assets', firstParty('clear-local-cover-assets'
   return localCoverAssetStore.clear();
 }));
 
+const { createAiProfileSync, STATE_KEY: AI_SYNC_STATE_KEY } = require('./sharedLogin/aiProfile.cjs');
 const { createSharedLoginDevice } = require('./sharedLogin/device.cjs');
 const sharedLoginDevice = createSharedLoginDevice({
   userData: () => app.getPath('userData'),
   safeStorage,
   fetch,
 });
+const aiProfileSync = createAiProfileSync({ store, credentials: aiCredentials, device: sharedLoginDevice });
+ipcMain.handle('save-ai-profile', firstParty('save-ai-profile', (_event, profile) => {
+  if (!aiProfileSync.saveLocal(profile)) throw new Error('Invalid AI profile');
+  return getPublicSettings();
+}));
+ipcMain.handle('shared-login-ai-sync', firstParty('shared-login-ai-sync', async (_event, origin, id) => (
+  aiProfileSync.sync(origin, id)
+)));
 ipcMain.handle('shared-login-origin', firstParty('shared-login-origin', () => sharedLoginDevice.origin()));
 ipcMain.handle('shared-login-enroll', firstParty('shared-login-enroll', (_event, url, token, label) => (
   sharedLoginDevice.enroll(url, token, label)

@@ -2,6 +2,7 @@ import { DualTheme } from "../types";
 import { applyStoredAnimationIntensityToDualTheme } from "./themePreferences";
 import { sanitizeDualTheme } from "./themeSanitizer";
 import { getWebAiProvider, type WebAiProvider } from "./runtimeConfig";
+import { requestSyncedAi } from "./sync/syncedAi";
 export {
   AI_PROVIDER_PRESETS,
   inferAiProviderFromUrl,
@@ -55,6 +56,12 @@ const getErrorMessage = (error: unknown) => {
   return String(error ?? '');
 };
 
+const parseAccountAiResponse = (result: NonNullable<Awaited<ReturnType<typeof requestSyncedAi>>>) => {
+  if (result.status >= 200 && result.status < 300) return result.body;
+  const body = result.body as { error?: string } | null;
+  throw new Error(body?.error || 'AI service request failed');
+};
+
 /** What our web theme routes answer when the deployment has no key; they say it for nothing else. */
 const WEB_ROUTE_WITHOUT_KEY = 'Server configuration error';
 
@@ -76,12 +83,17 @@ export const generateThemeFromLyrics = async (
       return sanitizeDualTheme(dualTheme);
     }
 
+    const body = JSON.stringify({ lyricsText, ...options });
+    const accountResult = await requestSyncedAi('theme', body);
+    if (accountResult) {
+      return applyStoredAnimationIntensityToDualTheme(sanitizeDualTheme(parseAccountAiResponse(accountResult)));
+    }
     const response = await fetch(themeRoute(getWebAiProvider()), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ lyricsText, ...options }),
+      body,
     });
 
     if (!response.ok) {
@@ -157,10 +169,14 @@ export const requestLyricSegmentation = async (lines: string[], signal?: AbortSi
     return bridge.segmentLyrics(lines);
   }
 
+  const body = JSON.stringify({ lines });
+  const accountResult = await requestSyncedAi('segment', body, signal);
+  if (accountResult) return (parseAccountAiResponse(accountResult) as { lines?: unknown }).lines;
+
   const response = await fetch(SEGMENTATION_ROUTE, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ lines }),
+    body,
     signal,
   });
 
