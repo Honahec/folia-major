@@ -1,6 +1,6 @@
 import {
     getSharedLoginDevice, handleSharedLoginDevices, isSharedLoginRequestAllowed,
-    SHARED_LOGIN_PREFIX, sharedLoginError, type SharedLoginDb, type SharedLoginDevice,
+    SHARED_LOGIN_PREFIX, sharedLoginError, sharedLoginJson, type SharedLoginDb, type SharedLoginDevice,
 } from './devices.ts';
 
 // Mount the account service only when the deployment has its own D1 binding.
@@ -9,6 +9,7 @@ export type SharedLoginEnv = { FOLIA_SHARED_LOGIN_DB?: SharedLoginDb };
 
 export interface SharedLoginProvider<Env extends SharedLoginEnv> {
     id: string;
+    available?(env: Env): boolean;
     request(request: Request, env: Env, db: SharedLoginDb, device: SharedLoginDevice, path: string): Promise<Response>;
     refresh(db: SharedLoginDb, env: Env): Promise<void>;
 }
@@ -23,11 +24,16 @@ export const createSharedLoginRoutes = <Env extends SharedLoginEnv>(providers: r
         try {
             const device = path === '/enroll' ? null : await getSharedLoginDevice(request, db);
             const discovery = request.method === 'GET' && path === '/device';
+            if (discovery && device) {
+                const availableProviders = providers.filter(item => item.available?.(env) ?? true).map(item => item.id);
+                return sharedLoginJson({ id: device.id, label: device.label, providers: availableProviders });
+            }
             if (device && !discovery && request.headers.get('X-Folia-Device') !== device.id) {
                 return sharedLoginError('device_changed', 409);
             }
             const provider = providers.find(item => path.startsWith(`/${item.id}/`));
             if (provider) {
+                if (provider.available && !provider.available(env)) return sharedLoginError('provider_unavailable', 503);
                 return device ? await provider.request(request, env, db, device, path.slice(provider.id.length + 1))
                     : sharedLoginError('device_required', 401);
             }

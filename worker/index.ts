@@ -4,6 +4,7 @@ import { handleGenerateOpenAITheme } from "./generate-theme_openai.ts";
 import { handleLyricProxy } from "./lyric-proxy.ts";
 import { handleSegmentLyrics } from "./segment-lyrics.ts";
 import { QQ_API_PREFIX, type QqServerlessEnv, handleQq, sharedQqProvider as sharedProvider } from "./qq/index.ts";
+import { sharedNeteaseProvider as extraProvider, type NeteaseSharedEnv as ExtraProviderEnv } from "./netease/sharedLogin.ts";
 import { SHARED_LOGIN_PREFIX, withoutSharedLoginCookie } from "./sharedLogin/devices.ts";
 import { createSharedLoginRoutes, type SharedLoginEnv } from "./sharedLogin/routes.ts";
 
@@ -30,9 +31,9 @@ type Env = {
   OPENAI_API_URL?: string;
   OPENAI_API_MODEL?: string;
   OPENAI_API_TEMPERATURE?: string;
-} & QqServerlessEnv & SharedLoginEnv;
+} & QqServerlessEnv & SharedLoginEnv & ExtraProviderEnv;
 
-const sharedLogin = createSharedLoginRoutes([sharedProvider]);
+const sharedLogin = createSharedLoginRoutes<Env>([sharedProvider, extraProvider]);
 
 export default {
   async scheduled(_event: unknown, env: Env): Promise<void> {

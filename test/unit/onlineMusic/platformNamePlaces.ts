@@ -138,7 +138,7 @@ export const PLATFORM_NAME_PLACES: Record<string, PlatformNamePlace> = {
     'src/utils/playerLikeAvailability.ts': { n: { bodian: 1 }, kind: 'doc' },
     'src/utils/stageClientDemo.ts': { n: { netease: 3 }, kind: 'stored', why: 'the stage API\'s lyric source type' },
     'src/vite-env.d.ts': { n: { netease: 23, qq: 13, kugou: 5, bodian: 4, ytm: 4, spotify: 4, qishui: 4, appleMusic: 4, fnmusic: 3 }, kind: 'stored', why: 'the types of the preload bridge and of the stage API\'s lyric source; raised by the upstream merge 2026-10-17; fnmusic adds its request and status channels; appleMusic for the companion bridge type' },
-    'worker/index.ts': { n: { qq: 11 }, kind: 'main', why: 'routes the QQ backend' },
+    'worker/index.ts': { n: { qq: 11, netease: 1 }, kind: 'main', why: 'registers shared providers and routes the public QQ backend' },
     'worker/lyric-proxy.ts': { n: { qq: 1, kugou: 1 }, kind: 'main', why: 'the hosts the lyric relay may reach' },
     'worker/qq.ts': { n: { qq: 32 }, kind: 'main', why: 'the worker entry of the QQ backend' },
     'worker/qqQrChannel.ts': { n: { qq: 6 }, kind: 'main', why: 'a Durable Object the worker binds by name' },
