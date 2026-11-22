@@ -5,7 +5,7 @@
 几条各平台通用的事实：
 
 - 版本以 `package-lock.json` 为准。`npm ci` 按锁文件装，`package.json` 里写的范围只在改依赖时起作用。
-- 网页版的三个平台（网易云、酷狗、QQ）要一个部署好的服务，地址写在环境变量里（`.env.example` 的 `VITE_NETEASE_API_BASE`、`VITE_KUGOU_API_BASE`、`VITE_QQ_API_BASE`）。Docker 部署的那份在 `deploy/docker/<平台>-api/package.json`，版本和根目录的分开钉，升级时两处都要改。
+- 网页版通过环境变量接入独立的平台服务，地址写在环境变量里（`.env.example` 的 `VITE_NETEASE_API_BASE`、`VITE_KUGOU_API_BASE`、`VITE_QQ_API_BASE`）。Cloudflare 部署的 QQ 和网易云共享登录由 Folia Worker 直接提供。Docker 部署的那份在 `deploy/docker/<平台>-api/package.json`，版本和根目录的分开钉，升级时两处都要改。
 - `deploy/docker/**` 有改动时，CI 的 `docker-stack-check` 会构建镜像，并用 `deploy/docker/scripts/smoke-test.sh` 请求一次 `/netease/`、`/kugou/`、`/qq/login/status`。
 - 下面“哪些测试能抓到”只算单元测试。大多数测试用替身代替上游的包，上游换了答复的样子它们照样通过；这种情况写明“抓不到”，升级后要在应用里用真账号试。
 
@@ -13,7 +13,8 @@
 
 - **上游**：第三方库 `@neteasecloudmusicapienhanced/api`（仓库 NeteaseCloudMusicApiEnhanced/api-enhanced），它代我们向网易云自己的接口（例如 `interface.music.163.com`）发请求。
 - **版本**：4.41.1，根目录 `package.json`（钉死）和 `deploy/docker/netease-api/package.json` 都是。升级时两处和各自的锁文件一起改。
-- **桌面端怎么用**：主进程在工作线程里加载这个包，起一个只听 `127.0.0.1` 的本地服务（`electron/netease/neteaseApiWorker.cjs`，线程由 `neteaseApiHost.cjs` 开）；页面直接向 `http://127.0.0.1:<端口>` 发 HTTP（`netease/netease.ts`）。网页版发到 `VITE_NETEASE_API_BASE`。
+- **桌面端怎么用**：主进程在工作线程里加载这个包，起一个只听 `127.0.0.1` 的本地服务（`electron/netease/neteaseApiWorker.cjs`，线程由 `neteaseApiHost.cjs` 开）；页面直接向 `http://127.0.0.1:<端口>` 发 HTTP（`netease/netease.ts`）。未连接共享登录的网页版发到 `VITE_NETEASE_API_BASE`。
+- **共享登录怎么用**：`worker/netease/` 静态导入同一版本的接口模块和加密工具，使用 Worker Fetch，凭据在 D1 按用户加密。升级时也要检查 Worker 的扫码、播放地址、续期和已接入的接口。
 - **我们改了什么**（都在 `electron/netease/`）：
   - 加载前替换包内部的 `util/request` 导出（`withoutImplicitClientIp`）：只有显式要求随机国内 IP 的请求才带伪造的来源 IP，其余请求不写 `X-Real-IP` / `X-Forwarded-For`。原因写在 `neteaseApiStartup.cjs`：上游默认的写法会让扫码确认失败。Docker 镜像用 `deploy/docker/scripts/patch-music-api-client-ip.mjs` 对包的 `server.js` 做同样的事。
   - 推迟加载包依赖的 jsdom，到收藏歌单这类带 checkToken 的请求才加载（`lazyJsdom.cjs`）。
