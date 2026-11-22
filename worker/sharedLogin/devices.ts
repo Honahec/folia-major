@@ -3,7 +3,7 @@
 export interface SharedLoginStatement {
     bind(...values: (string | number | null)[]): SharedLoginStatement;
     first<T>(column?: keyof T): Promise<T | null>;
-    all<T>(): Promise<{ results: T[] }>;
+    all<T>(column?: keyof T): Promise<{ results: T[] }>;
     run(): Promise<{ meta: { changes: number } }>;
 }
 

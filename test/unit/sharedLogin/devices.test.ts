@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { handleSharedLogin } from '../../../worker/sharedLogin/routes';
+import { createSharedLoginRoutes } from '../../../worker/sharedLogin/routes';
 import { openSharedLoginDb } from './sqlite';
 
 // Check browser and desktop enrollment against the same database.
 
+const { fetch: handleSharedLogin } = createSharedLoginRoutes([]);
 const origin = 'https://folia.example';
 const aliceToken = 'a'.repeat(64);
 const bobToken = 'b'.repeat(64);
