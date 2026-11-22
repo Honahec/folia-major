@@ -10,6 +10,7 @@ export interface SharedLoginState {
     device: SharedLoginDevice | null;
     origin: string | null;
     deviceLost?: boolean;
+    providers?: readonly string[];
 }
 
 interface SharedLoginResponse {
@@ -32,6 +33,11 @@ const deviceFrom = (body: unknown): SharedLoginDevice | null => {
         || typeof body.id !== 'string' || typeof body.label !== 'string') return null;
     return { id: body.id, label: body.label };
 };
+
+const providersFrom = (body: unknown): readonly string[] => (
+    typeof body === 'object' && body !== null && 'providers' in body && Array.isArray(body.providers)
+        ? body.providers.filter((item): item is string => typeof item === 'string') : []
+);
 
 export const getSharedLoginState = () => state;
 export const watchSharedLoginState = (listener: () => void) => {
@@ -83,6 +89,7 @@ export const initializeSharedLogin = (): Promise<void> => {
             available: Boolean(electron?.enrollSharedLogin) || result.status === 200 || result.status === 401,
             device: deviceFrom(result.body),
             origin,
+            providers: result.status === 200 ? providersFrom(result.body) : state.providers,
             deviceLost: result.status !== 200 && (state.deviceLost || Boolean(electron && origin)),
         });
     })().catch(() => {
@@ -97,7 +104,11 @@ export const enrollSharedLogin = async (origin: string, token: string, label: st
     const result = desktop ? await desktop(origin, token, label)
         : await requestSharedLogin('/enroll', 'POST', JSON.stringify({ token, label }));
     const device = deviceFrom(result.body);
-    if (device) publish({ available: true, device, origin: desktop ? new URL(origin).origin : window.location.origin });
+    if (device) {
+        publish({ available: true, device, origin: desktop ? new URL(origin).origin : window.location.origin });
+        loading = undefined;
+        await initializeSharedLogin();
+    }
     return result.status;
 };
 
