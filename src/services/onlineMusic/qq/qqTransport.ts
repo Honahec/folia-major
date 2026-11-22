@@ -1,8 +1,11 @@
+import { useOnlineProviderAccountStore } from '../../../stores/useOnlineProviderAccountStore';
+import { normalizeQqUser } from './qqNormalize';
 import { OnlineProviderError } from '../../../types/onlineMusic';
 import { readProviderSessionValue, removeProviderSessionValue, writeProviderSessionValue } from '../providerStorage';
 import { withLoginRequestLimit } from '../login/loginRequestLimit';
 import { withOnlineRequestLimit } from '../failure/onlineRequestLimit';
 import { lyricProxyWebUrl } from '../../lyricProxy';
+import { getSharedLoginState, initializeSharedLogin, requestSharedLogin } from '../../sync/sharedLoginClient';
 import { errorMessage } from '../../../utils/errorText';
 
 // src/services/onlineMusic/qq/qqTransport.ts
@@ -237,7 +240,14 @@ const tokenFromCookieString = (cookie: string): string => {
 // `Access-Control-Allow-Origin: *`，按规范不允许搭配 credentials。
 const isSameOriginBase = (base: string): boolean => base.startsWith('/');
 
-export const hasQqSession = (): boolean => Boolean(getWebSessionCookie());
+let sharedQqAccount: { deviceId: string; connectionId: string; accountId: string } | null = null;
+
+export const usesSharedQqSession = (): boolean => {
+    const state = getSharedLoginState();
+    return Boolean(state.device || state.deviceLost);
+};
+
+export const hasQqSession = (): boolean => usesSharedQqSession() ? getSharedLoginState().device?.id === sharedQqAccount?.deviceId : Boolean(getWebSessionCookie());
 
 /**
  * 存着的 session 是不是停用的那个：主进程这次启动没读出加密的登录仓库、这次运行里也还没有新登录（isQqSessionStoreUnreadable），
@@ -245,15 +255,18 @@ export const hasQqSession = (): boolean => Boolean(getWebSessionCookie());
  * 它照旧存着，等能读出仓库的那次启动，读账号时报「查不到」而不是「没登录」（qqProvider 的 getLoginStatus）。这次运行里扫码登录过，
  * 仓库里读不出的那份就被替掉了：之后存着的 session 照常带，到期了也照常清掉。
  */
-export const isQqSessionParked = async (): Promise<boolean> => hasQqSession() && await isQqSessionStoreUnreadable();
+export const isQqSessionParked = async (): Promise<boolean> => !usesSharedQqSession() && hasQqSession() && await isQqSessionStoreUnreadable();
 
 /**
  * 有 session，而且这次请求会带上它：只有登录才有的栏目、推荐、收藏状态、试听按它分开走，停用的 session（isQqSessionParked）照游客走。
  * 要同步回答，用的是最近一次问到的仓库状态；还没问过时当作能带。读账号、退出登录、续期仍看 hasQqSession。
  */
-export const hasUsableQqSession = (): boolean => hasQqSession() && !lastStoreUnreadable;
+export const hasUsableQqSession = (): boolean => hasQqSession() && (usesSharedQqSession() || !lastStoreUnreadable);
 
-export const clearQqSession = (): void => removeProviderSessionValue('qq', 'cookie');
+export const clearQqSession = (): void => {
+    if (usesSharedQqSession()) sharedQqAccount = null;
+    else removeProviderSessionValue('qq', 'cookie');
+};
 
 // 后端的退避时长（qq-music-api 在 429 的响应体里给 retryAfterMs，同时带 Retry-After 头，单位是秒）。
 // 只收非负安全整数，读不出就不给，调用方按普通失败处理。
@@ -353,7 +366,7 @@ const persistConfirmedSession = (operation: QqOperation, body: any): void => {
 export const getQqRemoteApiBase = (): string | null => (getElectronQqPortReader() ? null : getWebApiBase() || null);
 
 export const getQqTransportAvailability = () => {
-    if (getElectronQqPortReader()) return { configured: true } as const;
+    if (usesSharedQqSession() || getElectronQqPortReader()) return { configured: true } as const;
     return getWebApiBase()
         ? { configured: true } as const
         : { configured: false, reason: 'not-configured' as const };
@@ -430,8 +443,13 @@ export const requestQq = async <T = unknown>(
             'qq',
         );
     }
-    const stored = getWebSessionCookie();
-    const base = await resolveApiBase();
+    if (typeof window !== 'undefined') await initializeSharedLogin();
+    const { device: sharedDevice, deviceLost } = getSharedLoginState();
+    if (deviceLost && !sharedDevice) {
+        throw new OnlineProviderError('auth-required', 'Reconnect this device to use the shared sign-in', 'qq');
+    }
+    const stored = sharedDevice ? '' : getWebSessionCookie();
+    const base = sharedDevice ? '' : await resolveApiBase();
     // The session parked for this run is not sent (isQqSessionParked). The status is read once the backend has a port.
     const cookie = stored && await isQqSessionStoreUnreadable() ? '' : stored;
 
@@ -459,8 +477,33 @@ export const requestQq = async <T = unknown>(
     const init: RequestInit = isPost
         ? { method: 'POST', credentials, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }
         : { credentials, headers };
+    const sendShared = async (device: NonNullable<typeof sharedDevice>, signal?: AbortSignal) => {
+        const method = operation === 'logout' ? 'DELETE' : isPost ? 'POST' : 'GET';
+        const path = operation === 'logout' ? '/qq/connection' : `/qq${endpoint.path}?${query}`;
+        const sharedAccount = sharedQqAccount?.deviceId === device.id ? sharedQqAccount : null;
+        const { accounts } = useOnlineProviderAccountStore.getState();
+        const knownAccounts: Partial<typeof accounts> = accounts;
+        const shown = knownAccounts.qq?.user;
+        if (operation !== 'login_status' && operation !== 'user_vip' && shown && sharedAccount
+            && String(shown.id) !== sharedAccount.accountId) {
+            throw new OnlineProviderError('unavailable', 'QQ Music is switching to a different shared account', 'qq');
+        }
+        const connection = sharedAccount?.connectionId;
+        const result = await requestSharedLogin(path, method, isPost ? JSON.stringify(payload) : undefined, signal, connection);
+        const response = new Response(null, { status: result.status });
+        if (operation !== 'logout' && sharedDevice !== getSharedLoginState().device) {
+            throw new OnlineProviderError(getSharedLoginState().deviceLost ? 'auth-required' : 'unavailable', 'Shared login device changed', 'qq');
+        }
+        const reply = result.body as { data?: { profile?: unknown } } | null;
+        if (result.connectionId && operation === 'login_status' && reply?.data?.profile) {
+            const account = normalizeQqUser(reply.data.profile);
+            sharedQqAccount = { deviceId: device.id, connectionId: result.connectionId, accountId: String(account.id) };
+        }
+        return { response, body: result.body };
+    };
     // The answer and its body, read together: the time limit covers both.
     const send = async (signal?: AbortSignal) => {
+        if (sharedDevice) return sendShared(sharedDevice, signal);
         const answer = await fetch(`${base}${endpoint.path}?${query}`, { ...init, ...(signal ? { signal } : {}) });
         return { response: answer, body: await readJsonBody(answer) };
     };
@@ -472,6 +515,7 @@ export const requestQq = async <T = unknown>(
         // 104400), which does not by itself say the sign-in ran out. login_status is asked once and decides
         // (checkSessionAfterRefusal); at an account read login_status itself decides (accountRead, signInRanOut).
         if (response.status === 401) {
+            if (sharedDevice && operation === 'login_status') sharedQqAccount = null;
             if (operation !== 'login_status' && cookie) checkSessionAfterRefusal(cookie);
             throw new OnlineProviderError('auth-required', 'QQMusicApi login required', 'qq', body, response.status);
         }
@@ -498,7 +542,13 @@ export const requestQq = async <T = unknown>(
         throw new OnlineProviderError('invalid-response', `QQMusicApi returned an unreadable ${operation} body`, 'qq');
     }
     assertUpstreamAccepted(operation, body);
-    persistConfirmedSession(operation, body);
+    if (sharedDevice) {
+        const reply = body as { data?: { profile?: unknown } } | null;
+        if (operation === 'login_status' && !reply?.data?.profile) sharedQqAccount = null;
+        if (operation === 'logout') sharedQqAccount = null;
+    } else {
+        persistConfirmedSession(operation, body);
+    }
     return body as T;
 };
 

@@ -6,6 +6,9 @@ import { withLoginRequestLimit } from '../login/loginRequestLimit';
 import { withOnlineRequestLimit } from '../failure/onlineRequestLimit';
 import { errorFields } from '../../../utils/errorText';
 
+import { initializeSharedLogin } from '../../sync/sharedLoginClient';
+import { hasSharedNeteaseAccount, requestSharedNetease, usesSharedNeteaseSession } from './sharedSession';
+
 type UnavailableSongReplacement = {
   replacementSong: SongResult;
   replacementSongId: number;
@@ -183,7 +186,9 @@ const eitherSignal = (caller: AbortSignal | null | undefined, limit: AbortSignal
 // the sign-in's limit; an HTTP error answer to it throws NeteaseLoginHttpError instead of being read as
 // an answer. 'online': a song's address or a collection's tracks, with the limit of online requests.
 const fetchWithCreds = async (endpoint: string, options: RequestInit = {}, limit?: 'sign-in' | 'online') => {
-  const base = await getApiBase();
+  if (endpoint.split('?')[0] !== '/logout' && typeof window !== 'undefined') await initializeSharedLogin();
+  const shared = usesSharedNeteaseSession();
+  const base = shared ? '' : await getApiBase();
   const url = `${base}${endpoint}`;
   // Ensure we send credentials to persist session (cookies)
   const defaultOptions: RequestInit = {
@@ -207,11 +212,11 @@ const fetchWithCreds = async (endpoint: string, options: RequestInit = {}, limit
   // Note: For Vercel hosted APIs, we rely on the `cookie` query param if cross-site cookies are blocked,
   // or `credentials: 'include'` if the server allows it. 
 
-  const storedCookie = readProviderSessionValue('netease', 'cookie', ['netease_cookie']);
+  const storedCookie = shared ? null : readProviderSessionValue('netease', 'cookie', ['netease_cookie']);
 
   let cookieToUse = storedCookie;
 
-  if (!cookieToUse) {
+  if (!shared && !cookieToUse) {
     const isLoginOrStatusEndpoint =
       endpoint.startsWith('/login') ||
       endpoint.startsWith('/user/account') ||
@@ -246,8 +251,11 @@ const fetchWithCreds = async (endpoint: string, options: RequestInit = {}, limit
   const send = async (signal?: AbortSignal) => {
     let res: Response;
     try {
-      res = await fetch(finalUrl, { ...defaultOptions, credentials: 'include', ...(signal ? { signal: eitherSignal(options.signal, signal) } : {}) });
+      const requestSignal = signal ? eitherSignal(options.signal, signal) : options.signal ?? undefined;
+      res = shared ? await requestSharedNetease(finalUrl, requestSignal)
+        : await fetch(finalUrl, { ...defaultOptions, credentials: 'include', signal: requestSignal });
     } catch (error) {
+      if (error instanceof OnlineProviderError) throw error;
       // The API itself could not be reached (the local backend has exited, a remote API is down): not a
       // failure of NetEase's. The error names the route, keeps the fetch's own error as its cause, and
       // is marked as the network's (`isNeteaseNetworkFailure`).
@@ -269,6 +277,13 @@ const fetchWithCreds = async (endpoint: string, options: RequestInit = {}, limit
       );
     }
     if (limit === 'sign-in' && !res.ok) throw new NeteaseLoginHttpError(res.status, body);
+    if (shared && !res.ok && !['/login/status', '/user/account'].includes(target)) {
+      const code = res.status === 301 || res.status === 401 || res.status === 403 ? 'auth-required' : 'unavailable';
+      throw new OnlineProviderError(code, `Shared NetEase request ${target} failed with HTTP ${res.status}`, 'netease');
+    }
+    if (shared && res.status >= 500) {
+      throw new OnlineProviderError('unavailable', `Shared NetEase account check failed with HTTP ${res.status}`, 'netease');
+    }
     if (!res.ok && typeof body === 'object' && body !== null) errorStatuses.set(body, res.status);
     return body;
   };
@@ -738,7 +753,7 @@ export const neteaseApi = {
   // The cookie is read here, before the first wait: the caller drops it as soon as this is called.
   logout: async () => {
     const cookie = readProviderSessionValue('netease', 'cookie', ['netease_cookie']);
-    return fetchWithCreds(cookie ? `/logout?cookie=${encodeURIComponent(cookie)}` : `/logout`);
+    return fetchWithCreds(cookie && !usesSharedNeteaseSession() ? `/logout?cookie=${encodeURIComponent(cookie)}` : '/logout');
   },
 
   getQrKey: async () => {
@@ -1093,7 +1108,9 @@ export const neteaseApi = {
   // Whether requests carry an account's session rather than the guest one. The recommendation
   // endpoints answer a guest as well, with lists that are the same for everyone (measured
   // 2026-10-08: `/recommend/songs` 3 songs, `/recommend/resource` 6 playlists, both code 200).
-  hasAccountSession: () => Boolean(readProviderSessionValue('netease', 'cookie', ['netease_cookie'])),
+  hasAccountSession: () => usesSharedNeteaseSession()
+    ? hasSharedNeteaseAccount()
+    : Boolean(readProviderSessionValue('netease', 'cookie', ['netease_cookie'])),
 
   // The home page of NetEase's mobile client: blocks of playlists, songs and albums (a guest gets
   // three). The first page is asked with `refresh`, NetEase's own flag for another pick; the

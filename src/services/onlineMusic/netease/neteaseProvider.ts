@@ -21,6 +21,7 @@ import { toFiniteNumber } from '../../../utils/replayGain';
 import { createProviderSongMetadata } from '../../../utils/songMetadata';
 import { NeteaseLoginHttpError, getNeteaseRemoteApiBase, httpErrorStatusOf, neteaseApi, resolveNeteaseSongAvailability } from './netease';
 import i18n from '../../../i18n/config';
+import { hasSharedNeteaseConnectionChanged, usesSharedNeteaseSession } from './sharedSession';
 import { readProviderSessionValue, removeProviderSessionValue, writeProviderSessionValue } from '../providerStorage';
 import { readNeteaseOldAccountCache, removeNeteaseOldAccountCache } from './neteaseOldAccountCache';
 import { collectNeteaseLoginDiagnostics } from './neteaseLoginDiagnostics';
@@ -536,6 +537,8 @@ export const neteaseProvider: OnlineMusicProvider = {
     },
     lyrics: { getLyrics, getChorusRanges: getNeteaseChorusRanges, getAlternateArtistName: getNeteaseAlternateArtistName },
     auth: {
+        usesSharedLogin: true,
+        hasSharedLoginConnectionChanged: hasSharedNeteaseConnectionChanged,
         getLoginTexts: () => ({ title: 'home.loginTitle', note: 'home.loginNote' }),
         localService: neteaseLocalService,
         async getLoginStatus() {
@@ -568,13 +571,19 @@ export const neteaseProvider: OnlineMusicProvider = {
         // The request to NetEase takes the cookie as it is when it is made (`neteaseApi.logout`),
         // and the cookie goes at once, before the first wait and whatever NetEase answers: what
         // asks whether an account is signed in (the explore page) finds none from then on.
+        waitsForLogoutConfirmation: usesSharedNeteaseSession,
         async logout() {
             const told = neteaseApi.logout();
+            if (usesSharedNeteaseSession()) {
+                await told;
+                return;
+            }
             await Promise.all([dropNeteaseSignIn(), told]);
         },
         // 登录失效：读登录状态说没有人登录之后（accountRead.ts）。只删那一次问的 cookie，存着的已经换了就不删：
         // 回答还在路上时扫码登录写下的新 cookie，那个回答说的不是它，留着。
         async signInRanOut() {
+            if (usesSharedNeteaseSession()) return;
             if (readProviderSessionValue('netease', 'cookie', ['netease_cookie']) === cookieAskedWith) {
                 await dropNeteaseSignIn();
                 return;
@@ -628,7 +637,7 @@ export const neteaseProvider: OnlineMusicProvider = {
                 case 801: return { state: 'waiting' };
                 case 802: return { state: 'scanned' };
                 case 803:
-                    if (typeof response?.cookie === 'string' && response.cookie) {
+                    if (!usesSharedNeteaseSession() && typeof response?.cookie === 'string' && response.cookie) {
                         writeProviderSessionValue('netease', 'cookie', response.cookie);
                     }
                     return { state: 'confirmed' };

@@ -728,6 +728,10 @@ export type LoginSelfCheckResult = {
 };
 
 export interface OnlineAuthProvider {
+    /** Refresh this account when the device joins or leaves a shared login server. */
+    usesSharedLogin?: boolean;
+    /** Check for a link, replacement or unlink made by another enrolled device. */
+    hasSharedLoginConnectionChanged?(): Promise<boolean>;
     getLoginStatus(): Promise<ProviderUser | null>;
     /**
      * The listener signs out. The account leaves the screen as soon as this is called, and what
@@ -735,6 +739,8 @@ export interface OnlineAuthProvider {
      * from is dropped before the first wait in here (account/accountRead.ts).
      */
     logout(): Promise<void>;
+    /** A server-side unlink must succeed before the local account can be removed. */
+    waitsForLogoutConfirmation?(): boolean;
     /**
      * The platform names nobody, or refuses the sign-in, and the account is about to leave the
      * screen: the adapter drops what it keeps of that sign-in and account. Called before the

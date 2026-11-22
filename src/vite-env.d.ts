@@ -820,6 +820,9 @@ declare global {
 
   interface Window {
     electron?: {
+      getSharedLoginOrigin?: () => Promise<string | null>;
+      enrollSharedLogin?: (url: string, token: string, label: string) => Promise<{ status: number; body: unknown }>;
+      requestSharedLogin?: (path: string, method: string, body?: string, expectedDevice?: string, connectionId?: string) => Promise<{ status: number; body: unknown; connectionId?: string | null }>;
       webUtils?: {
         /** Resolves the OS path of a dropped File (File.path was removed in modern Electron). */
         getPathForFile: (file: File) => string;

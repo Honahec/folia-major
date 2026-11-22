@@ -724,6 +724,20 @@ describe.each([
             expect(stored.has(snapshotKey())).toBe(false);
         });
 
+        it('keeps the account available for retry when a server-side unlink fails', async () => {
+            const logout = vi.fn<() => Promise<void>>().mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(undefined);
+            platform({ auth: { logout, waitsForLogoutConfirmation: () => true } });
+            await omni.readAccount(providerId, 'sync');
+
+            await expect(omni.signOutAccount(providerId)).rejects.toThrow('offline');
+            expect(account()).toMatchObject({ status: 'authenticated', user });
+            expect(stored.has(snapshotKey())).toBe(true);
+
+            await omni.signOutAccount(providerId);
+            expect(account()).toMatchObject({ status: 'anonymous', user: null });
+            expect(stored.has(snapshotKey())).toBe(false);
+        });
+
         it('takes the account off the screen at once and ends well when the platform cannot be told', async () => {
             const leaving = held<void>();
             platform({ auth: { logout: vi.fn(() => leaving.promise) } });

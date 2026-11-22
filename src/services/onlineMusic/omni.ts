@@ -794,8 +794,13 @@ export const omni = {
         return accountReads.read(providerId, reason);
     },
 
-    // The listener signs out of a provider: the account leaves the screen at once, the platform
-    // is told, and what was kept of the account on disk goes. Never rejects.
+    async refreshSharedLoginAccounts(): Promise<void> {
+        await Promise.all(listOnlineMusicProviders().filter(provider => provider.auth?.usesSharedLogin)
+            .map(provider => accountReads.read(provider.id, 'sign-in')));
+    },
+
+    // Sign-out clears the account and its snapshot. A failed server-side unlink rejects so the
+    // listener can retry and other devices keep sharing the same account until it succeeds.
     signOutAccount(providerId: OmniProviderId): Promise<void> {
         return accountReads.signOut(providerId);
     },
@@ -1577,6 +1582,10 @@ export const omni = {
     // asked' where none was made. Never throws or rejects.
     accountMoment(moment: AccountMoment): Promise<AccountReadOutcome> {
         const providerId = activeProviderId();
+        for (const provider of listOnlineMusicProviders()) {
+            const check = provider.auth?.hasSharedLoginConnectionChanged?.();
+            if (check) void check.then(changed => changed ? accountReads.read(provider.id, 'sign-in') : undefined).catch(() => {});
+        }
         const playlists = moment === 'home-entered' ? accountReads.readAtHome(providerId) : Promise.resolve<AccountReadOutcome>('not asked');
         void accountMoments(moment, providerId);
         return playlists;

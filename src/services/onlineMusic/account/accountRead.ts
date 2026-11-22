@@ -528,10 +528,20 @@ export const createAccountReads = <R>(deps: AccountReadsDeps<R>) => {
             }
         },
 
-        // The listener signs out: the adapter's `logout` is told (see `drop`), and the account
-        // leaves the screen at once, whatever becomes of the request. Never rejects.
+        // Shared unlink can fail while other devices still use the account, so keep it visible
+        // until the server confirms. Local sign-outs still drop the account immediately.
         async signOut(providerId: OnlineProviderId): Promise<void> {
-            await drop(providerId, readsOf(providerId), undefined, () => getOnlineMusicProvider(providerId)?.auth?.logout());
+            const auth = getOnlineMusicProvider(providerId)?.auth;
+            const reads = readsOf(providerId);
+            if (auth?.waitsForLogoutConfirmation?.()) {
+                const generation = reads.generation;
+                const userId = shownUser(providerId)?.id;
+                await auth.logout();
+                if (reads.generation !== generation || shownUser(providerId)?.id !== userId) return;
+                await drop(providerId, reads, undefined, () => undefined);
+            } else {
+                await drop(providerId, reads, undefined, () => auth?.logout());
+            }
             console.log(`[Account] ${providerId}: signed out`);
         },
 

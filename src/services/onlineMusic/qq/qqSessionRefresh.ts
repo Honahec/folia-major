@@ -1,6 +1,6 @@
 import { OnlineProviderError } from '../../../types/onlineMusic';
 import { readProviderSessionValue, writeProviderSessionValue } from '../providerStorage';
-import { hasQqSession, requestQq } from './qqTransport';
+import { hasQqSession, requestQq, usesSharedQqSession } from './qqTransport';
 
 // src/services/onlineMusic/qq/qqSessionRefresh.ts
 // 会话的续期。Serverless 的会话（sealed）就装在 token 里，大约 3 天到期；
@@ -22,7 +22,7 @@ let routeMissing = false;
 const storedSession = (): string => readProviderSessionValue('qq', 'cookie') || '';
 
 const refreshOnce = async (): Promise<void> => {
-    if (routeMissing || !hasQqSession()) return;
+    if (routeMissing || usesSharedQqSession() || !hasQqSession()) return;
     const sent = storedSession();
     lastAttemptAt = Date.now();
     try {
