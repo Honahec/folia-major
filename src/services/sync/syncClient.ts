@@ -94,9 +94,9 @@ export const connectSyncConfig = async (config: SyncProviderConfig, deviceLabel:
             if (!window.electron?.enrollSharedLogin && window.location.origin !== url.origin) {
                 throw new SyncClientError('Open the sync server address in this browser to connect', 400);
             }
-            const status = await enrollSharedLogin(url.origin, authToken, deviceLabel);
-            const { device, accountId } = getSharedLoginState();
-            if (status !== 201 || !device) throw new SyncClientError(`Sync enrollment failed: ${status}`, status);
+            const { status, connection } = await enrollSharedLogin(url.origin, authToken, deviceLabel);
+            if (!connection) throw new SyncClientError(`Sync enrollment failed: ${status}`, status);
+            const { device, accountId } = connection;
             return { ...next, authToken: '', deviceId: device.id, accountId };
         }
     }

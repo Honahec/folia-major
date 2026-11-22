@@ -103,17 +103,21 @@ export const initializeSharedLogin = (refresh = false): Promise<void> => {
     return loading;
 };
 
-export const enrollSharedLogin = async (origin: string, token: string, label: string): Promise<number> => {
+export const enrollSharedLogin = async (origin: string, token: string, label: string) => {
     const desktop = window.electron?.enrollSharedLogin;
+    const expectedOrigin = desktop ? new URL(origin).origin : window.location.origin;
     const result = desktop ? await desktop(origin, token, label)
         : await requestSharedLogin('/enroll', 'POST', JSON.stringify({ token, label }));
     const device = deviceFrom(result.body);
-    if (device) {
-        publish({ available: true, device, origin: desktop ? new URL(origin).origin : window.location.origin });
-        loading = undefined;
-        await initializeSharedLogin();
+    if (result.status !== 201 || !device) return { status: result.status, connection: null };
+
+    publish({ available: true, device, origin: expectedOrigin });
+    await initializeSharedLogin(true);
+    const connection = getSharedLoginState();
+    if (connection.device?.id !== device.id || connection.origin !== expectedOrigin) {
+        return { status: 409, connection: null };
     }
-    return result.status;
+    return { status: 201, connection: { device, accountId: connection.accountId } };
 };
 
 export const listSharedLoginDevices = async (): Promise<SharedLoginDevice[]> => {
