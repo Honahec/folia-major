@@ -54,8 +54,15 @@ describe('shared login devices', () => {
         const bearer = (device: { id: string; deviceToken: string }) => ({
             Authorization: `Bearer ${device.deviceToken}`, 'X-Folia-Device': device.id,
         });
-        const list = await request('/devices', { headers: bearer(alice) });
-        expect(await list.json()).toEqual({ devices: [{ id: linux.id, label: 'Linux' }, { id: alice.id, label: 'Mac' }] });
+        const rename = (label: string, headers = bearer(alice)) => request('/device', {
+            method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ label }),
+        });
+        expect((await rename('   ')).status).toBe(400);
+        expect((await rename('x'.repeat(81))).status).toBe(400);
+        expect((await rename('Wrong device', { ...bearer(alice), 'X-Folia-Device': bob.id })).status).toBe(409);
+        expect(await (await rename('  Studio Mac  ')).json()).toEqual({ id: alice.id, label: 'Studio Mac' });
+        const list = await request('/devices', { headers: bearer(linux) });
+        expect(await list.json()).toEqual({ devices: [{ id: linux.id, label: 'Linux' }, { id: alice.id, label: 'Studio Mac' }] });
         await request(`/devices/${bob.id}`, { method: 'DELETE', headers: bearer(alice) });
         expect((await request('/device', { headers: bearer(bob) })).status).toBe(200);
         const staleHeaders = { ...bearer(bob), 'X-Folia-Device': alice.id };

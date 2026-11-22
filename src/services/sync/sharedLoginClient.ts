@@ -47,12 +47,12 @@ export const watchSharedLoginState = (listener: () => void) => {
 };
 
 export const requestSharedLogin = async (
-    path: string, method = 'GET', body?: string, signal?: AbortSignal, connectionId?: string,
+    path: string, method = 'GET', body?: string, signal?: AbortSignal, connectionId?: string, deviceId?: string,
 ): Promise<SharedLoginResponse> => {
     const desktop = window.electron?.requestSharedLogin;
     const previous = state;
     signal?.throwIfAborted();
-    const expectedDevice = path === '/device' && method === 'GET' ? undefined : previous.device?.id;
+    const expectedDevice = path === '/device' && method === 'GET' ? undefined : deviceId ?? previous.device?.id;
     const headers = new Headers();
     if (body) headers.set('Content-Type', 'application/json');
     if (connectionId) headers.set('X-Folia-Connection', connectionId);
@@ -124,6 +124,18 @@ export const listSharedLoginDevices = async (): Promise<SharedLoginDevice[]> => 
     const { body } = await requestSharedLogin('/devices');
     if (typeof body !== 'object' || body === null || !('devices' in body) || !Array.isArray(body.devices)) return [];
     return body.devices.map(deviceFrom).filter(device => device !== null);
+};
+
+export const renameSharedLoginDevice = async (id: string, label: string): Promise<boolean> => {
+    const previous = state;
+    if (previous.device?.id !== id) return false;
+    const result = await requestSharedLogin('/device', 'POST', JSON.stringify({ label }));
+    const device = deviceFrom(result.body);
+    if (result.status !== 200 || device?.id !== id || state.device?.id !== id || state.origin !== previous.origin) {
+        return false;
+    }
+    publish({ ...state, device });
+    return true;
 };
 
 export const revokeSharedLoginDevice = async (id: string): Promise<boolean> => {

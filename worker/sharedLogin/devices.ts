@@ -114,6 +114,17 @@ export const handleSharedLoginDevices = async (
         ).bind(device.userId, Date.now()).all<{ id: string; label: string }>();
         return sharedLoginJson({ devices: results });
     }
+    if (request.method === 'POST' && path === '/device') {
+        const body: unknown = await request.json().catch(() => null);
+        if (typeof body !== 'object' || body === null || !('label' in body)
+            || typeof body.label !== 'string' || !body.label.trim() || body.label.length > 80) {
+            return sharedLoginError('invalid_device_label', 400);
+        }
+        const label = body.label.trim();
+        const result = await db.prepare('UPDATE shared_login_devices SET label = ? WHERE id = ? AND user_id = ? AND expires_at > ?')
+            .bind(label, device.id, device.userId, Date.now()).run();
+        return result.meta.changes === 1 ? sharedLoginJson({ id: device.id, label }) : sharedLoginError('device_required', 401);
+    }
     const id = path === '/device' ? device.id : path.match(/^\/devices\/([a-f0-9-]{36})$/)?.[1];
     if (request.method === 'DELETE' && id) {
         await db.prepare('DELETE FROM shared_login_devices WHERE id = ? AND user_id = ?')

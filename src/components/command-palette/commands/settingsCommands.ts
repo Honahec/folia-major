@@ -1,3 +1,5 @@
+import { getSharedLoginState, initializeSharedLogin } from '../../../services/sync/sharedLoginClient';
+import { useDeviceRenameStore } from '../../modal/settings/pages/integration/deviceRenameStore';
 import { syncNow } from '../../../services/sync/syncCoordinator';
 import { isSyncConfigured } from '../../../services/sync/syncConfig';
 import { buildObsCustomCss } from '../../../services/obs/obsCustomCss';
@@ -362,6 +364,20 @@ export const settingsCommands: CommandPaletteCommand[] = [
     createSettingsCommand('settings-storage', 'Storage settings', 'Open cache and storage settings', ['storage', 'cache', '存储', '缓存'], 'options', 'storage'),
     createSettingsAnchorCommand('settings-media-cache', 'Media cache', 'Jump to the downloaded audio cache', ['audio cache', 'downloads', 'offline songs', '音频缓存'], 'mediaCache'),
     createSettingsAnchorCommand('settings-r2-sync', 'Sync server settings', 'Open sync server settings', ['sync server', 'd1 sync', 'cloud sync', 'sync settings', '同步', '云同步', 'd1同步', 'shared login', 'link device', '共享登录', '设备授权'], 'r2Sync'),
+    defineCommand({
+        id: 'rename-sync-device',
+        group: 'settings',
+        title: 'Rename this sync device',
+        description: 'Edit the name shown to your other devices',
+        keywords: ['rename device', 'device name', 'sync label', '设备改名', '设备名称'],
+        execute: async (_input, context) => {
+            await initializeSharedLogin();
+            const { device } = getSharedLoginState();
+            if (device) useDeviceRenameStore.setState({ draft: device });
+            context.settings.openSettings('options', 'integration', null, 'r2Sync');
+            return true;
+        },
+    }),
     {
         id: 'sync-now',
         group: 'settings',
