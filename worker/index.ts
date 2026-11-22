@@ -4,6 +4,8 @@ import { handleGenerateOpenAITheme } from "./generate-theme_openai.ts";
 import { handleLyricProxy } from "./lyric-proxy.ts";
 import { handleSegmentLyrics } from "./segment-lyrics.ts";
 import { QQ_API_PREFIX, type QqServerlessEnv, handleQq } from "./qq.ts";
+import { SHARED_LOGIN_PREFIX } from "./sharedLogin/devices.ts";
+import { handleSharedLogin, type SharedLoginEnv } from "./sharedLogin/routes.ts";
 
 // qq-music-api uses Buffer during requests; Workers do not expose it without nodejs_compat.
 // 这一行在模块作用域，所以它先于 fetch handler 与下面导出的 Durable Object 具现化执行 ——
@@ -28,7 +30,7 @@ type Env = {
   OPENAI_API_URL?: string;
   OPENAI_API_MODEL?: string;
   OPENAI_API_TEMPERATURE?: string;
-} & QqServerlessEnv;
+} & QqServerlessEnv & SharedLoginEnv;
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -62,6 +64,10 @@ export default {
           { status: 502, headers: { "content-type": "application/json; charset=utf-8" } },
         );
       }
+    }
+
+    if (url.pathname === SHARED_LOGIN_PREFIX || url.pathname.startsWith(`${SHARED_LOGIN_PREFIX}/`)) {
+      return handleSharedLogin(request, env);
     }
 
     return env.ASSETS.fetch(request);
