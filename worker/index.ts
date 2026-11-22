@@ -1,4 +1,4 @@
-import { SYNC_HEALTH_PATH, syncHealth } from './sync/routes.ts';
+import { SYNC_HEALTH_PATH, probeSync } from './sync/routes.ts';
 import { Buffer } from "buffer";
 import { handleGenerateTheme } from "./generate-theme.ts";
 import { handleGenerateOpenAITheme } from "./generate-theme_openai.ts";
@@ -48,7 +48,7 @@ export default {
     }
 
     if (url.pathname === SYNC_HEALTH_PATH && request.method === 'GET') {
-      return syncHealth(Boolean(env.FOLIA_SHARED_LOGIN_DB));
+      return probeSync(env.FOLIA_SHARED_LOGIN_DB);
     }
 
     request = withoutSharedLoginCookie(request);

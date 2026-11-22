@@ -27,7 +27,7 @@ export const createSharedLoginRoutes = <Env extends SharedLoginEnv>(providers: r
             const discovery = request.method === 'GET' && path === '/device';
             if (discovery && device) {
                 const availableProviders = providers.filter(item => item.available?.(env) ?? true).map(item => item.id);
-                return sharedLoginJson({ id: device.id, label: device.label, providers: availableProviders });
+                return sharedLoginJson({ id: device.id, label: device.label, accountId: device.userId, providers: availableProviders });
             }
             if (device && !discovery && request.headers.get('X-Folia-Device') !== device.id) {
                 return sharedLoginError('device_changed', 409);

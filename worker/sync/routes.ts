@@ -26,6 +26,16 @@ export const syncHealth = (configured: boolean) => sharedLoginJson(
     { 'Access-Control-Allow-Origin': '*' },
 );
 
+export const probeSync = async (db?: SharedLoginDb) => {
+    if (!db) return syncHealth(false);
+    try {
+        await db.prepare('SELECT 1 FROM sync_settings LIMIT 1').first();
+        return syncHealth(true);
+    } catch {
+        return syncHealth(false);
+    }
+};
+
 const getSetting = (db: SharedLoginDb, userId: string) => db.prepare(
     'SELECT value_json, updated_at FROM sync_settings WHERE user_id = ?',
 ).bind(userId).first<{ value_json: string; updated_at: string }>();
@@ -39,9 +49,10 @@ const writeThemes = async (db: SharedLoginDb, userId: string, input: unknown) =>
             return sharedLoginError('invalid_themes', 400);
         }
         const source = item.source === 'auto' || item.source === 'fallback' || item.source === 'edited' ? item.source : 'manual';
+        const updatedAt = new Date(item.updatedAt).toISOString();
         records.push([
-            item.fingerprint, getThemeBucketId(item.fingerprint), item.theme, source, item.updatedAt,
-            hashSyncString(`${item.fingerprint}\u0000${item.updatedAt}`),
+            item.fingerprint, getThemeBucketId(item.fingerprint), item.theme, source, updatedAt,
+            hashSyncString(`${item.fingerprint}\u0000${updatedAt}`),
         ]);
     }
     await db.prepare(`
@@ -78,11 +89,12 @@ export const handleUserSync = async (request: Request, db: SharedLoginDb, userId
             if (body?.schemaVersion !== schemaVersion || !isTime(body.updatedAt) || !object(body.data)) {
                 return sharedLoginError('invalid_settings', 400);
             }
+            const updatedAt = new Date(body.updatedAt).toISOString();
             await db.prepare(`
                 INSERT INTO sync_settings (user_id, value_json, updated_at) VALUES (?, ?, ?)
                 ON CONFLICT(user_id) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at
                 WHERE excluded.updated_at >= sync_settings.updated_at
-            `).bind(userId, JSON.stringify(body), body.updatedAt).run();
+            `).bind(userId, JSON.stringify({ ...body, updatedAt }), updatedAt).run();
             return sharedLoginJson({ ok: true });
         }
         case 'GET /themes/manifest': {

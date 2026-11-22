@@ -52,7 +52,8 @@ describe('unified Worker sync', () => {
         const b = await enroll('b');
         const theme = { fingerprint: 'one', theme: { color: 'blue' }, source: 'manual', updatedAt: '2026-11-22T10:00:00.000Z' };
         const updated = { ...theme, updatedAt: '2026-11-22T11:00:00.000Z' };
-        expect(await (await a('/sync/themes/put', 'POST', { themes: [theme, updated, theme] })).json()).toMatchObject({ ok: true });
+        const sameTimeInAnotherZone = { ...theme, updatedAt: '2026-11-22T12:00:00+02:00' };
+        expect(await (await a('/sync/themes/put', 'POST', { themes: [sameTimeInAnotherZone, updated, theme] })).json()).toMatchObject({ ok: true });
         await b('/sync/themes/put', 'POST', { themes: [{ ...theme, theme: { color: 'red' } }] });
         expect(await (await a('/sync/themes/manifest')).json()).toMatchObject({ buckets: buildThemeBucketSummaries([updated]) });
         expect(await (await b('/sync/themes/manifest')).json()).toMatchObject({ buckets: buildThemeBucketSummaries([theme]) });
