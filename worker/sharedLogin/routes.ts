@@ -1,3 +1,4 @@
+import { handleUserSync } from '../sync/routes.ts';
 import {
     getSharedLoginDevice, handleSharedLoginDevices, isSharedLoginRequestAllowed,
     SHARED_LOGIN_PREFIX, sharedLoginError, sharedLoginJson, type SharedLoginDb, type SharedLoginDevice,
@@ -30,6 +31,10 @@ export const createSharedLoginRoutes = <Env extends SharedLoginEnv>(providers: r
             }
             if (device && !discovery && request.headers.get('X-Folia-Device') !== device.id) {
                 return sharedLoginError('device_changed', 409);
+            }
+            if (path.startsWith('/sync/')) {
+                return device ? await handleUserSync(request, db, device.userId, path.slice('/sync'.length))
+                    : sharedLoginError('device_required', 401);
             }
             const provider = providers.find(item => path.startsWith(`/${item.id}/`));
             if (provider) {

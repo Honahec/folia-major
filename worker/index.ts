@@ -1,3 +1,4 @@
+import { SYNC_HEALTH_PATH, syncHealth } from './sync/routes.ts';
 import { Buffer } from "buffer";
 import { handleGenerateTheme } from "./generate-theme.ts";
 import { handleGenerateOpenAITheme } from "./generate-theme_openai.ts";
@@ -44,6 +45,10 @@ export default {
 
     if (url.pathname === SHARED_LOGIN_PREFIX || url.pathname.startsWith(`${SHARED_LOGIN_PREFIX}/`)) {
       return sharedLogin.fetch(request, env);
+    }
+
+    if (url.pathname === SYNC_HEALTH_PATH && request.method === 'GET') {
+      return syncHealth(Boolean(env.FOLIA_SHARED_LOGIN_DB));
     }
 
     request = withoutSharedLoginCookie(request);
