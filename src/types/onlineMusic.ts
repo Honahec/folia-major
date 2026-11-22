@@ -728,6 +728,8 @@ export type LoginSelfCheckResult = {
 };
 
 export interface OnlineAuthProvider {
+    /** Refresh this account when the device joins or leaves a shared login server. */
+    usesSharedLogin?: boolean;
     getLoginStatus(): Promise<ProviderUser | null>;
     /**
      * The listener signs out. The account leaves the screen as soon as this is called, and what

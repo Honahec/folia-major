@@ -17,6 +17,7 @@ export const O = {
     sync: option(SERVICES, 'r2Sync', 'options.r2Sync'),
     syncUrl: option(SERVICES, 'r2SyncWorkerUrl', 'options.r2SyncWorkerUrl'),
     syncToken: option(SERVICES, 'r2SyncToken', 'options.r2SyncToken'),
+    sharedLogin: option(SERVICES, 'sharedLogin', 'options.sharedLogin'),
     discord: option(SERVICES, 'discordRichPresence', 'options.discordRichPresence', { electronOnly: true }),
     scrobble: option(SERVICES, 'scrobbleSettings', 'options.neteaseScrobble'),
     transparentBackground: option(STREAMING, 'transparentPlayerBackground', 'options.transparentPlayerBackground'),

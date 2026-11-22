@@ -19,7 +19,8 @@ import { toSafePlaybackUrl } from '../../../utils/appPlaybackHelpers';
 import { fetchQQLyrics } from './qqLyricProvider';
 import { writeProviderSessionValue } from '../providerStorage';
 import { getQqLyricSearchAlias, normalizeQqCollection, normalizeQqSong, normalizeQqUser } from './qqNormalize';
-import { clearQqSession, getQqRemoteApiBase, getQqTransportAvailability, hasQqSession, hasUsableQqSession, isQqSessionParked, requestQq } from './qqTransport';
+import { getSharedLoginState, initializeSharedLogin } from '../../sync/sharedLoginClient';
+import { clearQqSession, getQqRemoteApiBase, getQqTransportAvailability, hasQqSession, hasUsableQqSession, isQqSessionParked, requestQq, usesSharedQqSession } from './qqTransport';
 import { canRunLoginSelfCheck, runLoginSelfCheck } from '../loginSelfCheck';
 import { diagnosticLine, formatDiagnosticClock } from '../login/loginDiagnosticReport';
 import { collectQqLoginDiagnostics } from './qqLoginDiagnostics';
@@ -508,8 +509,9 @@ const signedOutUnlessStoreUnreadable = async (): Promise<null> => {
 };
 
 const getLoginStatus = async (): Promise<ProviderUser | null> => {
+    if (typeof window !== 'undefined') await initializeSharedLogin();
     // No opaque backend session means the account cannot be authenticated, so the startup request is skipped.
-    if (!hasQqSession()) {
+    if (!usesSharedQqSession() && !hasQqSession()) {
         noteLoginStatusCheck(diagnosticLine`no backend session stored`);
         return null;
     }
@@ -528,7 +530,9 @@ const getLoginStatus = async (): Promise<ProviderUser | null> => {
         lastQqAccountId = accountId || null;
         const user = await withQqVipType(normalized);
         // 登录还在：会话要在到期前续（qqSessionRefresh.ts）；续期的请求排在通道探测之后。
-        void refreshDeclaredChannels().then(keepQqSessionFresh);
+        void refreshDeclaredChannels().then(() => {
+            if (!usesSharedQqSession()) keepQqSessionFresh();
+        });
         // The acceptance test account returned a profile without a display name, so the profile itself is the signal.
         noteLoginStatusCheck(diagnosticLine`signed in (user id ${user.id ? 'present' : 'missing'}, nickname ${user.nickname ? 'present' : 'missing'})`);
         console.info('[QQProvider] login-status:profile', {
@@ -554,6 +558,10 @@ const logout = async (): Promise<void> => {
     clearQqGuessYouLikeCatalog();
     lastQqAccountId = null;
     stopQqSessionRefresh();
+    if (usesSharedQqSession()) {
+        await requestQq('logout');
+        return;
+    }
     const told = hasQqSession()
         ? requestQq('logout').catch(error => {
             console.warn('[QQProvider] logout:error', error);
@@ -585,6 +593,7 @@ const DEFAULT_QQ_LOGIN_METHOD_ID = QQ_LOGIN_METHODS[0].id;
 let declaredChannels: string[] | null = null;
 let channelProbe: Promise<void> | null = null;
 let channelProbeRetryAt = 0;
+let channelDevice: string | undefined;
 
 const CHANNEL_PROBE_RETRY_DELAY_MS = 30_000;
 
@@ -594,11 +603,19 @@ const CHANNEL_PROBE_RETRY_DELAY_MS = 30_000;
  * 探测无论如何都不该把异常抛回渲染路径。
  */
 const refreshDeclaredChannels = (forceRetry = false): Promise<void> => {
+    const deviceId = getSharedLoginState().device?.id;
+    if (channelDevice !== deviceId) {
+        channelDevice = deviceId;
+        declaredChannels = null;
+        channelProbe = null;
+        channelProbeRetryAt = 0;
+    }
     if (channelProbe) return channelProbe;
     if (!forceRetry && Date.now() < channelProbeRetryAt) return Promise.resolve();
     channelProbe = Promise.resolve()
         .then(() => requestQq<any>('login_channels'))
         .then(response => {
+            if (channelDevice !== deviceId) return;
             const channels = response?.data?.channels;
             if (!Array.isArray(channels) || channels.length === 0) throw new Error('Invalid QQ login channels');
             declaredChannels = channels.map(String);
@@ -606,6 +623,7 @@ const refreshDeclaredChannels = (forceRetry = false): Promise<void> => {
             channelProbeRetryAt = 0;
         })
         .catch(() => {
+            if (channelDevice !== deviceId) return;
             // 旧后端或暂时性网络错误都先回落到硬编码数组；清掉 Promise 才能在稍后或打开登录时重试。
             channelProbe = null;
             channelProbeRetryAt = Date.now() + CHANNEL_PROBE_RETRY_DELAY_MS;
@@ -654,6 +672,7 @@ const loginShape = (): QqLoginShape => resolvedLoginShape ?? currentLoginShape()
 /** 登录动作必须等能力发现完成，避免启动的二维码通道与弹窗显示的选项来自两个时刻。 */
 const resolveLoginMethods = async (): Promise<LoginMethod[]> => {
     resolvedLoginShape = null;
+    if (typeof window !== 'undefined') await initializeSharedLogin();
     await refreshDeclaredChannels(true);
     resolvedLoginShape = currentLoginShape();
     return getLoginMethods();
@@ -1131,10 +1150,13 @@ export const qqProvider: OnlineMusicProvider = {
                 };
             },
         }),
+        usesSharedLogin: true,
         getLoginStatus,
         logout,
-        // The session this page keeps for the backend goes the same way.
-        signInRanOut: logout,
+        // A passive account check can race a scan on another device. Only explicit logout unlinks it.
+        async signInRanOut() {
+            if (!usesSharedQqSession()) await logout();
+        },
         showsKeptAccountAtStart: true,
         getLoginMethods,
         resolveLoginMethods,

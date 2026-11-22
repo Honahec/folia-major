@@ -794,6 +794,11 @@ export const omni = {
         return accountReads.read(providerId, reason);
     },
 
+    async refreshSharedLoginAccounts(): Promise<void> {
+        await Promise.all(listOnlineMusicProviders().filter(provider => provider.auth?.usesSharedLogin)
+            .map(provider => accountReads.read(provider.id, 'sign-in')));
+    },
+
     // The listener signs out of a provider: the account leaves the screen at once, the platform
     // is told, and what was kept of the account on disk goes. Never rejects.
     signOutAccount(providerId: OmniProviderId): Promise<void> {

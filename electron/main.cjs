@@ -7404,6 +7404,20 @@ ipcMain.handle('clear-local-cover-assets', firstParty('clear-local-cover-assets'
   return localCoverAssetStore.clear();
 }));
 
+const { createSharedLoginDevice } = require('./sharedLogin/device.cjs');
+const sharedLoginDevice = createSharedLoginDevice({
+  userData: () => app.getPath('userData'),
+  safeStorage,
+  fetch,
+});
+ipcMain.handle('shared-login-origin', firstParty('shared-login-origin', () => sharedLoginDevice.origin()));
+ipcMain.handle('shared-login-enroll', firstParty('shared-login-enroll', (_event, url, token, label) => (
+  sharedLoginDevice.enroll(url, token, label)
+)));
+ipcMain.handle('shared-login-request', firstParty('shared-login-request', (_event, path, method, body, expectedDevice, connectionId) => (
+  sharedLoginDevice.request(path, method, body, expectedDevice, connectionId)
+)));
+
 // 内嵌后端的端口、状态、重启、诊断快照与主动自检（electron/loginBackendIpc.cjs）。
 registerLoginBackendIpc({
   ipcMain,

@@ -12,11 +12,13 @@ vi.mock('../../../worker/qq', () => ({ handleQqServerlessRequest: vi.fn() }));
 const { fetch: handleSharedLogin, scheduled: refreshSharedLogin } = createSharedLoginRoutes([sharedQqProvider]);
 const upstream = vi.mocked(handleQqServerlessRequest);
 const origin = 'https://folia.example';
+const deviceIds = new Map<string, string>();
 let database: ReturnType<typeof openSharedLoginDb>;
 let env: { FOLIA_SHARED_LOGIN_DB: typeof database.db; QQ_SESSION_SECRET: string };
 
 beforeEach(() => {
     upstream.mockReset();
+    deviceIds.clear();
     database = openSharedLoginDb('0002_provider_sessions');
     env = { FOLIA_SHARED_LOGIN_DB: database.db, QQ_SESSION_SECRET: 'test-secret' };
     for (const user of ['a', 'b']) {
@@ -34,12 +36,14 @@ const enroll = async (user: string) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token: user.repeat(64), label: 'Desktop' }),
     }), env);
-    return (await response.json() as { deviceToken: string }).deviceToken;
+    const { deviceToken, id } = await response.json() as { deviceToken: string; id: string };
+    deviceIds.set(deviceToken, id);
+    return deviceToken;
 };
 
-const send = (path: string, token: string, method = 'GET') => handleSharedLogin(
+const send = (path: string, token: string, method = 'GET', connectionId = '') => handleSharedLogin(
     new Request(`${origin}/api/shared-login/qq${path}`, {
-        method, headers: { Authorization: `Bearer ${token}`, 'X-QQ-Session': 'untrusted' },
+        method, headers: { Authorization: `Bearer ${token}`, 'X-QQ-Session': 'untrusted', 'X-Folia-Device': deviceIds.get(token) ?? '', 'X-Folia-Connection': connectionId },
     }),
     env,
 );
@@ -72,11 +76,15 @@ describe('shared QQ account', () => {
         expect(upstream.mock.calls.at(-1)?.[2]).toBe('');
         expect((await send('/login/status', outsider)).status).toBe(401);
         expect((await send('/login/refresh', second, 'POST')).status).toBe(404);
-        expect((await send('/connection', second, 'DELETE')).status).toBe(200);
+        expect(await (await send(`/login/qr/check?key=${key}`, first)).json()).toEqual({ code: 803 });
+        expect((await send('/user/playlist', second, 'GET', 'old')).status).toBe(409);
+        expect((await send('/user/song/like', second, 'POST', 'old')).status).toBe(409);
+        expect((await send('/connection', second, 'DELETE', 'old')).status).toBe(409);
+        expect((await send('/connection', second, 'DELETE', key)).status).toBe(200);
         expect((await send('/login/status', first)).status).toBe(401);
     });
 
-    it('prevents an in-flight QR response from restoring an unlinked account', async () => {
+    it('prevents an older in-flight QR response from replacing a newer sign-in', async () => {
         const first = await enroll('a');
         const second = await enroll('a');
         const key = await startQr(first);
@@ -90,7 +98,8 @@ describe('shared QQ account', () => {
         });
         const pending = send(`/login/qr/check?key=${key}`, first);
         await started;
-        await send('/connection', second, 'DELETE');
+        const replacement = await startQr(second);
+        expect(replacement).not.toBe(key);
         finishQr(Response.json({ code: 803, cookie: 'qqmusic_session=qq1.a.late' }));
         expect(await (await pending).json()).toEqual({ code: 800 });
         expect((await send('/login/status', first)).status).toBe(401);

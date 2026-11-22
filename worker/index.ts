@@ -4,7 +4,7 @@ import { handleGenerateOpenAITheme } from "./generate-theme_openai.ts";
 import { handleLyricProxy } from "./lyric-proxy.ts";
 import { handleSegmentLyrics } from "./segment-lyrics.ts";
 import { QQ_API_PREFIX, type QqServerlessEnv, handleQq, sharedQqProvider as sharedProvider } from "./qq/index.ts";
-import { SHARED_LOGIN_PREFIX } from "./sharedLogin/devices.ts";
+import { SHARED_LOGIN_PREFIX, withoutSharedLoginCookie } from "./sharedLogin/devices.ts";
 import { createSharedLoginRoutes, type SharedLoginEnv } from "./sharedLogin/routes.ts";
 
 // qq-music-api uses Buffer during requests; Workers do not expose it without nodejs_compat.
@@ -41,6 +41,12 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
 
+    if (url.pathname === SHARED_LOGIN_PREFIX || url.pathname.startsWith(`${SHARED_LOGIN_PREFIX}/`)) {
+      return sharedLogin.fetch(request, env);
+    }
+
+    request = withoutSharedLoginCookie(request);
+
     if (url.pathname === "/api/generate-theme") {
       return handleGenerateTheme(request, env);
     }
@@ -69,10 +75,6 @@ export default {
           { status: 502, headers: { "content-type": "application/json; charset=utf-8" } },
         );
       }
-    }
-
-    if (url.pathname === SHARED_LOGIN_PREFIX || url.pathname.startsWith(`${SHARED_LOGIN_PREFIX}/`)) {
-      return sharedLogin.fetch(request, env);
     }
 
     return env.ASSETS.fetch(request);

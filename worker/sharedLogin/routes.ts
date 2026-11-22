@@ -22,6 +22,10 @@ export const createSharedLoginRoutes = <Env extends SharedLoginEnv>(providers: r
         const path = new URL(request.url).pathname.slice(SHARED_LOGIN_PREFIX.length);
         try {
             const device = path === '/enroll' ? null : await getSharedLoginDevice(request, db);
+            const discovery = request.method === 'GET' && path === '/device';
+            if (device && !discovery && request.headers.get('X-Folia-Device') !== device.id) {
+                return sharedLoginError('device_changed', 409);
+            }
             const provider = providers.find(item => path.startsWith(`/${item.id}/`));
             if (provider) {
                 return device ? await provider.request(request, env, db, device, path.slice(provider.id.length + 1))

@@ -29,10 +29,16 @@ const catalogWrites = new Set([
 const catalogItem = /^\/(?:getMusicPlay|getSongListDetail)\/[a-zA-Z0-9_-]+$|^\/getSongInfo\/[a-zA-Z0-9_-]+(?:\/\d+)?$/;
 
 
-type ProviderSession = { sealed_token: string | null; refresh_after: number; qr_id: string | null; qr_key: string | null; qr_device_id: string | null };
+const CONNECTION_HEADER = 'X-Folia-Connection';
+
+type ProviderSession = {
+    connection_id: string | null;
+    confirmed_device_id: string | null;
+    confirmed_at: number | null;
+    sealed_token: string | null; refresh_after: number; qr_id: string | null; qr_key: string | null; qr_device_id: string | null };
 
 const readSession = (db: SharedLoginDb, userId: string) => db.prepare(`
-    SELECT sealed_token, refresh_after, qr_id, qr_key, qr_device_id
+    SELECT connection_id, confirmed_device_id, confirmed_at, sealed_token, refresh_after, qr_id, qr_key, qr_device_id
     FROM shared_provider_sessions WHERE user_id = ? AND provider = 'qq'
 `).bind(userId).first<ProviderSession>();
 
@@ -62,11 +68,14 @@ const providerRequest = (
     );
 };
 
-const passResponse = async (response: Response) => {
+const passResponse = async (response: Response, connection?: string | null) => {
     const body = await jsonBody(response);
     if (!body) return sharedLoginError('provider_response_invalid', 502);
     const retryAfter = response.headers.get('Retry-After');
-    return sharedLoginJson(body, response.status, retryAfter ? { 'Retry-After': retryAfter } : undefined);
+    const headers = new Headers();
+    if (retryAfter) headers.set('Retry-After', retryAfter);
+    if (connection) headers.set(CONNECTION_HEADER, connection);
+    return sharedLoginJson(body, response.status, headers);
 };
 
 const handleQr = async (
@@ -100,6 +109,10 @@ const handleQr = async (
 
     const session = await readSession(db, userId);
     const qrId = url.searchParams.get('key');
+    if (qrId && path === '/login/qr/check' && session?.connection_id === qrId
+        && session.confirmed_device_id === deviceId && session.confirmed_at && Date.now() - session.confirmed_at < 180_000) {
+        return sharedLoginJson({ code: 803 }, 200, { [CONNECTION_HEADER]: qrId });
+    }
     if (!qrId || session?.qr_id !== qrId || session.qr_device_id !== deviceId || !session.qr_key) {
         return sharedLoginJson({ code: path === '/login/qr/cancel' ? 200 : 800 });
     }
@@ -117,7 +130,7 @@ const handleQr = async (
     if (!body) return sharedLoginError('provider_response_invalid', 502);
     if (body.code !== 803) {
         return sharedLoginJson({
-            code: body.code, message: body.message, stage: body.stage, upstreamCode: body.upstreamCode,
+            code: body.code, message: body.message, failureStage: body.failureStage, failureReason: body.failureReason, upstreamCode: body.upstreamCode,
             retryAfterMs: body.retryAfterMs, failureHint: body.failureHint,
         }, upstream.status);
     }
@@ -128,11 +141,14 @@ const handleQr = async (
     if (!token) return sharedLoginError('provider_session_missing', 502);
     const saved = await db.prepare(`
         UPDATE shared_provider_sessions SET sealed_token = ?, refresh_after = ?, refresh_until = 0,
+            connection_id = ?, confirmed_device_id = ?, confirmed_at = ?,
             qr_id = NULL, qr_device_id = NULL, qr_key = NULL
         WHERE user_id = ? AND provider = 'qq' AND qr_id = ? AND qr_device_id = ?
             AND EXISTS (SELECT 1 FROM shared_login_devices WHERE id = ? AND expires_at > ?)
-    `).bind(token, Date.now() + HOUR, userId, qrId, deviceId, deviceId, Date.now()).run();
-    return sharedLoginJson({ code: saved.meta.changes === 1 ? 803 : 800 });
+    `).bind(token, Date.now() + HOUR, qrId, deviceId, Date.now(), userId, qrId, deviceId, deviceId, Date.now()).run();
+    return saved.meta.changes === 1
+        ? sharedLoginJson({ code: 803 }, 200, { [CONNECTION_HEADER]: qrId })
+        : sharedLoginJson({ code: 800 });
 };
 
 const handleSharedQq = async (
@@ -140,16 +156,23 @@ const handleSharedQq = async (
 ): Promise<Response> => {
     if (!env.QQ_SESSION_SECRET) return sharedLoginError('provider_unavailable', 503);
     const url = new URL(request.url);
-    if (request.method === 'GET' && QR_ROUTES.has(path)) return handleQr(env, db, device, url, path);
+    if (request.method === 'GET' && QR_ROUTES.has(path)) {
+        return handleQr({ ...env, QQ_QR_CHANNEL: undefined }, db, device, url, path);
+    }
+    const expectedConnection = request.headers.get(CONNECTION_HEADER);
     if (request.method === 'DELETE' && path === '/connection') {
-        await db.prepare("DELETE FROM shared_provider_sessions WHERE user_id = ? AND provider = 'qq'").bind(device.userId).run();
-        return sharedLoginJson({ ok: true });
+        if (!expectedConnection) return sharedLoginError('connection_changed', 409);
+        const removed = await db.prepare(
+            "DELETE FROM shared_provider_sessions WHERE user_id = ? AND provider = 'qq' AND connection_id = ?",
+        ).bind(device.userId, expectedConnection).run();
+        return removed.meta.changes === 1 ? sharedLoginJson({ ok: true }) : sharedLoginError('connection_changed', 409);
     }
 
     const query = url.searchParams;
     query.delete('cookie');
     if (request.method === 'GET' && path === '/login/channels') {
-        return sharedLoginJson({ code: 200, data: { channels: ['wechat', 'qq'] } });
+        const response = await providerRequest({ ...env, QQ_QR_CHANNEL: undefined }, url.origin, path, query);
+        return passResponse(response);
     }
     const canRead = path === SESSION_PATH || catalogReads.has(path) || catalogItem.test(path);
     const canWrite = catalogWrites.has(path);
@@ -157,11 +180,16 @@ const handleSharedQq = async (
     if (request.method !== (canWrite ? 'POST' : 'GET')) return sharedLoginError('method_not_allowed', 405);
 
     const session = await readSession(db, device.userId);
+    if (path !== SESSION_PATH && (canWrite || expectedConnection)
+        && (!expectedConnection || session?.connection_id !== expectedConnection || !session.sealed_token)) {
+        return sharedLoginError('connection_changed', 409);
+    }
     if (path === SESSION_PATH && !session?.sealed_token) return sharedLoginError('provider_sign_in_required', 401);
     const payload = request.method === 'POST' ? await request.text() : undefined;
     if (payload && payload.length > 64_000) return sharedLoginError('payload_too_large', 413);
-    const response = await providerRequest(env, url.origin, path, query, request.method, payload, session?.sealed_token);
-    return passResponse(response);
+    const seal = path === SESSION_PATH || expectedConnection ? session?.sealed_token : null;
+    const response = await providerRequest(env, url.origin, path, query, request.method, payload, seal);
+    return passResponse(response, path === SESSION_PATH ? session?.connection_id : null);
 };
 
 const refreshSharedQqSessions = async (db: SharedLoginDb, env: QqServerlessEnv): Promise<void> => {

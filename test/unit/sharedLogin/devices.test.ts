@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { withoutSharedLoginCookie } from '../../../worker/sharedLogin/devices';
 import { createSharedLoginRoutes } from '../../../worker/sharedLogin/routes';
 import { openSharedLoginDb } from './sqlite';
 
@@ -35,7 +36,12 @@ describe('shared login devices', () => {
         expect(response.status).toBe(201);
         expect(await response.json()).not.toHaveProperty('deviceToken');
         const cookie = response.headers.get('Set-Cookie') ?? '';
-        expect(cookie).toContain('Secure; HttpOnly; SameSite=Strict');
+        expect(cookie).toContain('__Host-folia-device=');
+        expect(cookie).toContain('Path=/; Secure; HttpOnly; SameSite=Strict');
+        const publicRequest = new Request(`${origin}/api/lyric-proxy`, {
+            headers: { Cookie: `${cookie.split(';')[0]}; other=value` },
+        });
+        expect(withoutSharedLoginCookie(publicRequest).headers.get('Cookie')?.trim()).toBe('other=value');
         const status = await request('/device', { headers: { Cookie: cookie.split(';')[0] } });
         expect(await status.json()).toMatchObject({ label: 'PWA' });
         expect((await enroll(aliceToken, 'PWA', { Origin: 'https://other.example' })).status).toBe(403);
@@ -45,14 +51,19 @@ describe('shared login devices', () => {
         const alice = await (await enroll(aliceToken, 'Mac')).json();
         const linux = await (await enroll(aliceToken, 'Linux')).json();
         const bob = await (await enroll(bobToken, 'Bob')).json();
-        const bearer = (token: string) => ({ Authorization: `Bearer ${token}` });
-        const list = await request('/devices', { headers: bearer(alice.deviceToken) });
+        const bearer = (device: { id: string; deviceToken: string }) => ({
+            Authorization: `Bearer ${device.deviceToken}`, 'X-Folia-Device': device.id,
+        });
+        const list = await request('/devices', { headers: bearer(alice) });
         expect(await list.json()).toEqual({ devices: [{ id: linux.id, label: 'Linux' }, { id: alice.id, label: 'Mac' }] });
-        await request(`/devices/${bob.id}`, { method: 'DELETE', headers: bearer(alice.deviceToken) });
-        expect((await request('/device', { headers: bearer(bob.deviceToken) })).status).toBe(200);
-        await request(`/devices/${linux.id}`, { method: 'DELETE', headers: bearer(alice.deviceToken) });
-        expect((await request('/device', { headers: bearer(linux.deviceToken) })).status).toBe(401);
-        expect((await request('/device', { headers: bearer(alice.deviceToken) })).status).toBe(200);
+        await request(`/devices/${bob.id}`, { method: 'DELETE', headers: bearer(alice) });
+        expect((await request('/device', { headers: bearer(bob) })).status).toBe(200);
+        const staleHeaders = { ...bearer(bob), 'X-Folia-Device': alice.id };
+        expect((await request('/device', { method: 'DELETE', headers: staleHeaders })).status).toBe(409);
+        expect((await request('/device', { headers: bearer(bob) })).status).toBe(200);
+        await request(`/devices/${linux.id}`, { method: 'DELETE', headers: bearer(alice) });
+        expect((await request('/device', { headers: bearer(linux) })).status).toBe(401);
+        expect((await request('/device', { headers: bearer(alice) })).status).toBe(200);
         expect((await enroll('c'.repeat(64), 'Unknown')).status).toBe(401);
     });
 });

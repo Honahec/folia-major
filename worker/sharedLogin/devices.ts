@@ -38,6 +38,17 @@ const hashToken = async (token: string): Promise<string> =>
 const cookie = (token: string, maxAge: number): string =>
     `${DEVICE_COOKIE}=${token}; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=${maxAge}`;
 
+// Other routes may forward request headers to providers. Keep this cookie inside the account service.
+export const withoutSharedLoginCookie = (request: Request): Request => {
+    const cookies = request.headers.get('Cookie');
+    if (!cookies?.includes(`${DEVICE_COOKIE}=`)) return request;
+    const remaining = cookies.split(';').filter(value => !value.trim().startsWith(`${DEVICE_COOKIE}=`)).join(';');
+    const headers = new Headers(request.headers);
+    if (remaining.trim()) headers.set('Cookie', remaining);
+    else headers.delete('Cookie');
+    return new Request(request, { headers });
+};
+
 export const isSharedLoginRequestAllowed = (request: Request): boolean => {
     const origin = request.headers.get('Origin');
     const site = request.headers.get('Sec-Fetch-Site');
