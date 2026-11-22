@@ -197,6 +197,8 @@ Folium 是 Folia 的模组平台。模组可以添加新的歌词动画模式和
 
 ## Sync Server
 
+QQ 音乐可通过独立的个人 Sync Token 在桌面和 Web/PWA 之间共享授权，部署步骤见[音乐账号共享登录](docs/shared-music-login.md)。
+
 Folia 提供了可选的官方同步服务端 `sync-server`，用于在多个设备之间同步外观设置与 AI 主题库。服务端由用户自行托管，适合希望跨设备同步配色主题的用户。
 
 支持以下部署方式：
