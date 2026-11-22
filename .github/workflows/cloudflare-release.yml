@@ -3,6 +3,14 @@ name: Deploy Cloudflare Worker
 on:
   release:
     types: [published]
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+    secrets:
+      CLOUDFLARE_API_TOKEN:
+        required: true
   workflow_dispatch:
     inputs:
       tag:
@@ -19,7 +27,7 @@ concurrency:
 
 jobs:
   deploy:
-    if: github.repository == 'Honahec/folia-major' && (github.event_name == 'workflow_dispatch' || !github.event.release.prerelease)
+    if: github.repository == 'Honahec/folia-major' && (inputs.tag != '' || !github.event.release.prerelease)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:

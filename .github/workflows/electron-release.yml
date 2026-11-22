@@ -91,7 +91,7 @@ jobs:
           NODE
 
   prepare-release:
-    name: Prepare Realeco draft
+    name: Prepare Realeco release
     needs: validate-release
     if: needs.validate-release.outputs.should_build == 'true' && github.event.inputs.publish_aur_only != 'true'
     runs-on: ubuntu-latest
@@ -236,7 +236,7 @@ jobs:
           retention-days: 14
 
   publish-release:
-    name: Publish Realeco draft
+    name: Publish Realeco release
     needs: [validate-release, build]
     if: needs.validate-release.outputs.should_build == 'true' && github.event.inputs.publish_aur_only != 'true'
     runs-on: ubuntu-latest
@@ -247,20 +247,41 @@ jobs:
         with:
           path: realeco-artifacts
 
-      - name: Publish GitHub draft release
+      - name: Upload assets and publish the GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ needs.validate-release.outputs.tag }}
         shell: bash
         run: |
-          NOTES_FILE=$(find realeco-artifacts -type f -name 'release-notes.md' | head -n 1)
+          set -euo pipefail
+          NOTES_FILE=$(find realeco-artifacts -type f -name 'release-notes.md' -print -quit)
           mapfile -d '' files < <(find realeco-artifacts -type f ! -name 'release-notes.md' -print0)
           if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            target="$(gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --json targetCommitish,isDraft --jq 'if .isDraft then .targetCommitish else error("Release is already public") end')"
+            if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
+              target="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${RELEASE_TAG}" --jq .sha)"
+            fi
+            if [[ "$target" != "$GITHUB_SHA" ]]; then
+              echo "The existing draft targets a different commit." >&2
+              exit 1
+            fi
             gh release upload "${RELEASE_TAG}" "${files[@]}" --repo "${GITHUB_REPOSITORY}" --clobber
             gh release edit "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --title "Realeco ${RELEASE_TAG}" --notes-file "${NOTES_FILE}"
           else
             gh release create "${RELEASE_TAG}" "${files[@]}" --repo "${GITHUB_REPOSITORY}" --title "Realeco ${RELEASE_TAG}" --notes-file "${NOTES_FILE}" --target "${GITHUB_SHA}" --draft
           fi
+          gh release edit "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --draft=false --prerelease=false --latest
+
+  deploy-worker:
+    needs: [validate-release, publish-release]
+    if: github.repository == 'Honahec/folia-major'
+    uses: ./.github/workflows/cloudflare-release.yml
+    permissions:
+      contents: read
+    with:
+      tag: ${{ needs.validate-release.outputs.tag }}
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 
   publish-aur:
     name: Publish AUR package
