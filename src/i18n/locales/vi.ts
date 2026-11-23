@@ -4340,6 +4340,13 @@ export default {
         "description": "Sau khi đăng nhập, danh sách phát riêng tư của bạn nay có thể tải bài hát với phân trang thực tế. Máy chủ tự lưu trữ cần chạy qq-music-api 3.1.2 trở lên; phiên bản cũ hơn sẽ tự động quay về cơ chế dự phòng, và danh sách phát không đọc được sẽ báo rõ là danh sách không công khai thay vì hiển thị trống."
       }
     },
+    "v0_7_29_fork_5": {
+      "intro": "Dựa trên Folia v0.7.29.",
+      "installedAppGestures": {
+        "title": "Hạn chế phóng to ngoài ý muốn",
+        "description": "Trong ứng dụng web đã cài đặt, thao tác chụm, chạm hai lần và cử chỉ trên bàn di chuột không còn làm thay đổi mức thu phóng. Bạn vẫn có thể cuộn danh sách và phần cài đặt."
+      }
+    },
     "v0_7_29_fork_4": {
       "intro": "Dựa trên Folia v0.7.29.",
       "startupPlayback": {

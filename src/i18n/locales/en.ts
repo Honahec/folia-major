@@ -4340,6 +4340,13 @@ export default {
         "description": "When signed in, your own private playlists now load their songs, with real paging. Self-hosted backends must run qq-music-api 3.1.2 or later; older backends fall back automatically, and a playlist that cannot be read now says it is not public instead of silently showing as empty."
       }
     },
+    "v0_7_29_fork_5": {
+      "intro": "Based on Folia v0.7.29.",
+      "installedAppGestures": {
+        "title": "Fewer accidental zooms in the installed web app",
+        "description": "Pinch, double-tap, and trackpad gestures no longer zoom the page. You can still scroll through settings and lists."
+      }
+    },
     "v0_7_29_fork_4": {
       "intro": "Based on Folia v0.7.29.",
       "startupPlayback": {

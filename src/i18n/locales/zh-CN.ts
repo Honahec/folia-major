@@ -4340,6 +4340,13 @@ export default {
         "description": "登录后，自己创建的不公开歌单也能读取歌曲，并支持真正的分页加载。自建后端需要升级到 qq-music-api 3.1.2 或更新版本；旧后端会自动回退，读不到时会明确提示「不是公开歌单」，不再静默显示为空。"
       }
     },
+    "v0_7_29_fork_5": {
+      "intro": "基于 Folia v0.7.29。",
+      "installedAppGestures": {
+        "title": "避免在 PWA 中误触缩放",
+        "description": "已安装的 PWA 禁用双指捏合、双击和触控板缩放，设置页和列表仍可正常滚动。"
+      }
+    },
     "v0_7_29_fork_4": {
       "intro": "基于 Folia v0.7.29。",
       "startupPlayback": {

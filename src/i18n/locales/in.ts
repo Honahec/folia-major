@@ -4340,6 +4340,13 @@ export default {
         "description": "Setelah masuk, playlist pribadi buatan Anda kini dapat memuat lagu dengan paging sungguhan. Backend yang di-host sendiri harus memakai qq-music-api 3.1.2 atau lebih baru; backend lama beralih otomatis, dan playlist yang tidak dapat dibaca kini menjelaskan bahwa playlist itu tidak publik, alih-alih tampil kosong tanpa keterangan."
       }
     },
+    "v0_7_29_fork_5": {
+      "intro": "Berdasarkan Folia v0.7.29.",
+      "installedAppGestures": {
+        "title": "Kurangi pembesaran yang tidak disengaja",
+        "description": "Di aplikasi web yang terpasang, gestur cubit, ketuk dua kali, dan gestur trackpad tidak lagi memperbesar halaman. Pengaturan dan daftar tetap bisa digulir."
+      }
+    },
     "v0_7_29_fork_4": {
       "intro": "Berdasarkan Folia v0.7.29.",
       "startupPlayback": {
