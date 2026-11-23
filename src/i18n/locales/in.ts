@@ -4354,7 +4354,7 @@ export default {
         "title": "Ubah nama perangkat",
         "description": "Ubah nama perangkat ini di pengaturan Server Sinkronisasi agar mudah ditemukan dalam daftar."
       },
-      "qqPlayback": {
+      "playbackRestore": {
         "title": "Perbaikan galat 401 QQ Music saat aplikasi dibuka",
         "description": "PWA menunggu pemeriksaan login bersama QQ Music sebelum memulihkan pemutaran."
       }

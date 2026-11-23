@@ -4354,7 +4354,7 @@ export default {
         "title": "Rename your device",
         "description": "Change the name of this device in Sync Server settings to recognize it in the device list."
       },
-      "qqPlayback": {
+      "playbackRestore": {
         "title": "Fixed a QQ Music 401 on startup",
         "description": "The PWA waits for the shared QQ Music sign-in check before restoring playback."
       }

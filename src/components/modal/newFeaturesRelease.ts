@@ -23,6 +23,6 @@ export const NEW_FEATURES_RELEASE: NewFeaturesRelease = {
         { id: 'automaticSync', icon: Cloud },
         { id: 'aiServices', icon: KeyRound },
         { id: 'deviceNames', icon: Monitor },
-        { id: 'qqPlayback', icon: Music2 },
+        { id: 'playbackRestore', icon: Music2 },
     ],
 };

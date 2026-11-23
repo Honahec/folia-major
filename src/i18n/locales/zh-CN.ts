@@ -4354,7 +4354,7 @@ export default {
         "title": "给设备改名",
         "description": "在「同步服务」中修改当前设备的名称，方便在设备列表中辨认。"
       },
-      "qqPlayback": {
+      "playbackRestore": {
         "title": "修复 QQ 音乐启动时的 401 提示",
         "description": "PWA 恢复上次播放前会等 QQ 音乐共享登录检查完成。"
       }

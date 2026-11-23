@@ -4354,7 +4354,7 @@ export default {
         "title": "Đổi tên thiết bị",
         "description": "Đổi tên thiết bị này trong mục Máy chủ đồng bộ để dễ nhận ra trong danh sách."
       },
-      "qqPlayback": {
+      "playbackRestore": {
         "title": "Sửa lỗi QQ Music báo 401 khi mở ứng dụng",
         "description": "PWA chờ kiểm tra đăng nhập QQ Music dùng chung trước khi khôi phục phát nhạc."
       }
