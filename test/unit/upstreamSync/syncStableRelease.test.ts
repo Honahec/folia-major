@@ -142,7 +142,7 @@ describe.skipIf(process.platform === 'win32')('scheduled upstream sync', () => {
 
     it('skips when the stable tag is in the ancestry of main', () => {
         const { git, run, summary, upstreamSha } = fixture();
-        git('merge', '--no-ff', '-s', 'ours', '--no-edit', upstreamSha);
+        git('-c', 'user.name=Test', '-c', 'user.email=test@example.test', 'merge', '--no-ff', '-s', 'ours', '--no-edit', upstreamSha);
         git('push', 'origin', 'main');
         const result = run();
         expect(result.status, result.stderr).toBe(0);
