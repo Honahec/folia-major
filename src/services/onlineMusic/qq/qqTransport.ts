@@ -290,7 +290,11 @@ export const usesSharedQqSession = (): boolean => {
     return Boolean(state.device || state.deviceLost || state.discoveryUnavailable);
 };
 
-export const hasQqSession = (): boolean => usesSharedQqSession() ? getSharedLoginState().device?.id === sharedQqAccount?.deviceId : Boolean(getWebSessionCookie());
+export const hasQqSession = (): boolean => {
+    if (!usesSharedQqSession()) return Boolean(getWebSessionCookie());
+    const device = getSharedLoginState().device;
+    return Boolean(device && device.id === sharedQqAccount?.deviceId);
+};
 
 /**
  * 存着的 session 是不是停用的那个：主进程这次启动没读出加密的登录仓库、这次运行里也还没有新登录（isQqSessionStoreUnreadable），
@@ -486,6 +490,7 @@ export const requestQq = async <T = unknown>(
             'qq',
         );
     }
+    const localSession = getWebSessionCookie();
     if (typeof window !== 'undefined') await initializeSharedLogin();
     const { device: sharedDevice, deviceLost, discoveryUnavailable } = getSharedLoginState();
     if (!sharedDevice && discoveryUnavailable) {
@@ -494,7 +499,7 @@ export const requestQq = async <T = unknown>(
     if (deviceLost && !sharedDevice) {
         throw new OnlineProviderError('auth-required', 'Reconnect this device to use the shared sign-in', 'qq');
     }
-    const stored = sharedDevice ? '' : getWebSessionCookie();
+    const stored = sharedDevice ? '' : localSession;
     const base = sharedDevice ? '' : await resolveApiBase();
     // The session parked for this run is not sent (isQqSessionParked). The status is read once the backend has a port.
     const cookie = stored && await isQqSessionStoreUnreadable() ? '' : stored;

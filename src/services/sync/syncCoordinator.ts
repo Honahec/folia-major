@@ -302,23 +302,32 @@ export const importSyncLibraryBundle = async (
 
     const config = options.config ?? getSyncConfig();
     const pushRemote = (options.pushRemote ?? true) && isSyncConfigured(config);
+    const pending = getPendingSettings(config);
     setSyncStatus({ state: 'syncing', lastError: null });
     try {
-        if (pushRemote) ensureSyncConfigCurrent(config);
-        await saveSyncLibraryBundleToLocalCache(validatedBundle);
+        if (pushRemote) {
+            ensureSyncConfigCurrent(config);
+            const remote = await fetchRemoteSyncState(config);
+            if (!remote) throw new Error('Invalid sync state response');
+            const timestamps = [remote.settingsUpdatedAt, remote.themesUpdatedAt, pending?.updatedAt];
+            const nextTime = Math.max(Date.now(), ...timestamps.map(value => value ? Date.parse(value) + 1 : 0));
+            const updatedAt = new Date(nextTime).toISOString();
+            if (validatedBundle.settings) validatedBundle.settings.updatedAt = updatedAt;
+            for (const theme of validatedBundle.themes) theme.updatedAt = updatedAt;
+            await pushSyncLibraryBundleToRemote(validatedBundle, config);
+            ensureSyncConfigCurrent(config);
+        }
+        await saveSyncLibraryBundleToLocalCache(validatedBundle, config.deviceId ? syncAccountScope(config) : undefined);
         if (pushRemote) ensureSyncConfigCurrent(config);
         if (validatedBundle.settings) {
             applyingRemoteSettings = true;
             try {
                 applySyncedVisualSettings(readSyncableSettingsState(), validatedBundle.settings.data);
                 setLocalSettingsUpdatedAt(validatedBundle.settings.updatedAt, config);
-                clearPendingSettings(config, getPendingSettings(config));
+                clearPendingSettings(config, pending);
             } finally {
                 applyingRemoteSettings = false;
             }
-        }
-        if (pushRemote) {
-            await pushSyncLibraryBundleToRemote(validatedBundle, config);
         }
         setSyncStatus({ state: 'success', lastSyncAt: new Date().toISOString(), lastError: null });
         console.info('[sync] Import completed', {

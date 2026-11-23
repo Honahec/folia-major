@@ -23,6 +23,39 @@ beforeEach(() => {
 
 afterEach(() => vi.unstubAllGlobals());
 
+it('does not report an account when shared login discovery fails', async () => {
+    vi.stubGlobal('window', {
+        electron: {
+            getSharedLoginOrigin: async () => 'https://folia.example',
+            requestSharedLogin: async () => ({ status: 503, body: {} }),
+        },
+    });
+    const { initializeSharedLogin } = await import('../../../src/services/sync/sharedLoginClient');
+    await initializeSharedLogin();
+    const { hasQqSession, hasUsableQqSession } = await import('../../../src/services/onlineMusic/qq/qqTransport');
+    expect(hasQqSession()).toBe(false);
+    expect(hasUsableQqSession()).toBe(false);
+});
+
+it('sends the original local QQ session when logout clears it before discovery completes', async () => {
+    const values = new Map<string, string>();
+    const localStorage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => values.set(key, value), removeItem: (key: string) => values.delete(key) };
+    vi.stubGlobal('localStorage', localStorage);
+    vi.stubGlobal('window', { localStorage, electron: {
+        getSharedLoginOrigin: async () => null,
+        getQqPort: async () => 3000,
+    } });
+    const fetchMock = vi.fn(async () => Response.json({ code: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const { writeProviderSessionValue } = await import('../../../src/services/onlineMusic/providerStorage');
+    const { clearQqSession, requestQq } = await import('../../../src/services/onlineMusic/qq/qqTransport');
+    writeProviderSessionValue('qq', 'cookie', 'qqmusic_session=test-session');
+    const logout = requestQq('logout');
+    clearQqSession();
+    await logout;
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('cookie=qqmusic_session%3Dtest-session'), expect.anything());
+});
+
 describe('shared QQ playback while starting the PWA', () => {
     it.each([true, false])('waits for one account check even when playback starts first = %s', async playbackFirst => {
         const urls: string[] = [];

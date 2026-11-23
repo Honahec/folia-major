@@ -5,7 +5,7 @@ import { AI_PROVIDER_PRESETS, inferAiProviderFromUrl, modelAlwaysThinks, resolve
 import { openAIEndpointOf } from '../../../../../utils/openAIEndpoint';
 import { Button, Group, NumberField, Reveal, Row, Select, TextField, Toggle, Value, option, parseNumberText, type SettingsGroupDef, type SettingsOptionDef } from '../../kit';
 import { AiConnectionTestReply, AiConnectionTestStatus, useAiConnectionTest } from '../AiConnectionTest';
-import { useSettingsPage, type AiApiKeyName, type ElectronSettingsState } from '../settingsPageContext';
+import { useSettingsPage, type AiApiKeyName } from '../settingsPageContext';
 import { AiModelPicker } from './AiModelPicker';
 
 // One AI connection for the whole app — song themes and anything else that
@@ -64,7 +64,7 @@ const AiKeyField: React.FC<{ value: string; saved: boolean; onChange: (key: stri
 
 const AiProviderSettings: React.FC = () => {
     const { t } = useTranslation();
-    const { electronSettings: settings, setElectronSettings, onSaveElectronSettings, electronSaveStatus, savedAiApiKeys, savedOpenAIKeyEndpoint, onClearAiApiKey } = useSettingsPage().viewProps.desktop.model;
+    const { electronSettings: settings, editAiSettings: setAi, onSaveElectronSettings, electronSaveStatus, savedAiApiKeys, savedOpenAIKeyEndpoint, onClearAiApiKey } = useSettingsPage().viewProps.desktop.model;
     const preset = resolveAiProviderPreset(settings);
     const gemini = preset.protocol === 'gemini';
     const keyName: AiApiKeyName = gemini ? 'GEMINI_API_KEY' : 'OPENAI_API_KEY';
@@ -79,7 +79,6 @@ const AiProviderSettings: React.FC = () => {
     const mismatchedEndpoint = !gemini && savedOpenAIKeyEndpoint && savedOpenAIKeyEndpoint !== openAIEndpointOf(apiUrl)
         ? savedOpenAIKeyEndpoint : null;
     const usableSavedKey = savedAiApiKeys[keyName] && !mismatchedEndpoint;
-    const setAi = (patch: Partial<ElectronSettingsState>) => setElectronSettings(previous => ({ ...previous, ...patch }));
     // Blank stands for the provider's default, Gemini's too: it is what is saved, so a later change of
     // default reaches settings that never picked a model.
     const model = (gemini ? settings.GEMINI_API_MODEL : settings.OPENAI_API_MODEL) || '';
@@ -161,7 +160,14 @@ const AiProviderSettings: React.FC = () => {
                 </Row>
             )}
             <Row option={gemini ? O.geminiKey : O.key} hint={keyHint}>
-                <AiKeyField value={key} saved={usableSavedKey} onChange={value => setAi({ [keyName]: value })} onClear={() => void onClearAiApiKey(keyName)} />
+                <AiKeyField
+                    value={key}
+                    saved={usableSavedKey}
+                    onChange={value => setAi(gemini
+                        ? { GEMINI_API_KEY: value }
+                        : { OPENAI_API_KEY: value, OPENAI_API_URL: storedUrl })}
+                    onClear={() => void onClearAiApiKey(keyName)}
+                />
             </Row>
             <AiModelPicker option={gemini ? O.geminiModel : O.model} payload={payload} keySaved={usableSavedKey} presetId={preset.id}
                 suggestedModels={preset.suggestedModels} listsModels={preset.listsModels}

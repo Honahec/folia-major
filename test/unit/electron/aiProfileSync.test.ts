@@ -95,3 +95,16 @@ it('merges a locally cleared key with another device’s model change', async ()
     expect(a.credentials.get('GEMINI_API_KEY')).toBe('');
     expect(a.store.get('GEMINI_API_MODEL')).toBe('new-model');
 });
+
+it('saves only draft fields over a profile that changed on another device', async () => {
+    const worker = { accountId: 'alice', revision: 0, profile: null as unknown };
+    const desktop = makeDesktop(worker);
+    desktop.store.set('GEMINI_API_MODEL', 'synced-model');
+    desktop.store.set('OPENAI_API_URL', 'https://api.openai.com/v1');
+    desktop.credentials.set('OPENAI_API_KEY', 'saved-key');
+    expect(desktop.sync.saveLocal({ OPENAI_API_TEMPERATURE: '0.4' })).toBe(true);
+    expect(desktop.store.get('GEMINI_API_MODEL')).toBe('synced-model');
+    expect(desktop.store.get('OPENAI_API_URL')).toBe('https://api.openai.com/v1');
+    expect(desktop.store.get('OPENAI_API_TEMPERATURE')).toBe('0.4');
+    expect(desktop.credentials.get('OPENAI_API_KEY')).toBe('saved-key');
+});

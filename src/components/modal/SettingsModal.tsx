@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, startTransition } from 'react';
 import { AI_SETTINGS_CHANGED, AI_SETTINGS_SYNCED } from '../../services/sync/syncedAi';
+import { getSyncConfig, subscribeSyncConfig, syncAccountScope } from '../../services/sync/syncConfig';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { MotionValue } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
@@ -24,7 +25,7 @@ import { kitMotionTokens, useKitReducedMotion } from './settings/kit/motion';
 import { parseNumberText } from './settings/kit/numberText';
 import { SETTINGS_PAGES, SETTINGS_PAGE_OPTIONS } from './settings/pages';
 import HelpPage from './settings/pages/HelpPage';
-import { SettingsPageContext, type CacheCategory, type SettingsPageContextValue } from './settings/pages/settingsPageContext';
+import { SettingsPageContext, type AiSettingsDraft, type CacheCategory, type SettingsPageContextValue } from './settings/pages/settingsPageContext';
 import { AiHelpPromptModal } from './AiHelpPromptModal';
 import ReleaseNotesDialog from './ReleaseNotesDialog';
 import meowImageUrl from '../../../build/miao.png';
@@ -410,6 +411,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         DISCORD_RICH_PRESENCE_ENABLED: false,
     });
     const [electronSettingsLoaded, setElectronSettingsLoaded] = useState(false);
+    const aiDraft = useRef<AiSettingsDraft>({});
+    const aiDraftScope = useRef(syncAccountScope(getSyncConfig()));
     // Keys stay in the main process; the renderer only knows which ones are saved, and the endpoint
     // the OpenAI-compatible key is bound to. The GEMINI_API_KEY / OPENAI_API_KEY fields in
     // electronSettings are drafts of a replacement key.
@@ -467,6 +470,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         ...prev,
                         ...rest,
                         OPENAI_API_TEMPERATURE: String(rest.OPENAI_API_TEMPERATURE ?? '').trim() || DEFAULT_OPENAI_TEMPERATURE,
+                        ...aiDraft.current,
                     }));
                     setSavedElectronAiCredentials({
                         AI_PROVIDER: settings.AI_PROVIDER === 'openai' ? 'openai' : 'gemini',
@@ -491,9 +495,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     }, []);
 
     useEffect(() => {
+        let active = true;
+        let refreshSequence = 0;
         const refreshAiSettings = () => {
+            const sequence = ++refreshSequence;
             void window.electron?.getSettings().then((settings: Awaited<ReturnType<NonNullable<NonNullable<Window['electron']>['saveAiProfile']>>> | null) => {
-                if (!settings) return;
+                if (!active || sequence !== refreshSequence || !settings) return;
                 const { AI_API_KEYS_CONFIGURED: keys, OPENAI_API_KEY_ENDPOINT: endpoint } = settings;
                 setSavedElectronAiCredentials({
                     AI_PROVIDER: settings.AI_PROVIDER === 'openai' ? 'openai' : 'gemini',
@@ -501,7 +508,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     OPENAI_API_KEY: keys?.OPENAI_API_KEY === true,
                     OPENAI_API_KEY_ENDPOINT: typeof endpoint === 'string' ? endpoint : null,
                 });
-                setElectronSettings(previous => previous.GEMINI_API_KEY || previous.OPENAI_API_KEY ? previous : ({
+                setElectronSettings(previous => ({
                     ...previous,
                     AI_PROVIDER: settings.AI_PROVIDER === 'openai' ? 'openai' : 'gemini',
                     AI_PROVIDER_PRESET: settings.AI_PROVIDER_PRESET ?? '',
@@ -510,11 +517,26 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     OPENAI_API_URL: settings.OPENAI_API_URL ?? '',
                     OPENAI_API_TEMPERATURE: (settings.OPENAI_API_TEMPERATURE ?? '').trim() || DEFAULT_OPENAI_TEMPERATURE,
                     OPENAI_API_STREAM: settings.OPENAI_API_STREAM === true,
+                    GEMINI_API_KEY: '',
+                    OPENAI_API_KEY: '',
+                    ...aiDraft.current,
                 }));
             }).catch((error: unknown) => console.warn('[AiSettings] Could not refresh settings', error));
         };
+        const unsubscribe = subscribeSyncConfig(() => {
+            const scope = syncAccountScope(getSyncConfig());
+            if (scope === aiDraftScope.current) return;
+            aiDraftScope.current = scope;
+            aiDraft.current = {};
+            setElectronSettings(previous => ({ ...previous, GEMINI_API_KEY: '', OPENAI_API_KEY: '' }));
+            refreshAiSettings();
+        });
         window.addEventListener(AI_SETTINGS_SYNCED, refreshAiSettings);
-        return () => window.removeEventListener(AI_SETTINGS_SYNCED, refreshAiSettings);
+        return () => {
+            active = false;
+            unsubscribe();
+            window.removeEventListener(AI_SETTINGS_SYNCED, refreshAiSettings);
+        };
     }, []);
 
     useEffect(() => {
@@ -564,50 +586,61 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         });
     };
 
+    const editAiSettings = (patch: AiSettingsDraft) => {
+        aiDraft.current = { ...aiDraft.current, ...patch };
+        setElectronSettings(previous => ({ ...previous, ...patch }));
+    };
+
     const saveElectronSettings = async () => {
         const electron = window.electron;
         if (electron?.saveAiProfile) {
-            // Read a localized number and let the main process save the whole AI profile together.
-            const configuredTemperature = parseNumberText(electronSettings.OPENAI_API_TEMPERATURE);
-            const temperature = configuredTemperature !== null && configuredTemperature >= 0 && configuredTemperature <= 2
-                ? String(configuredTemperature)
-                : DEFAULT_OPENAI_TEMPERATURE;
+            const scope = syncAccountScope(getSyncConfig());
+            if (scope !== aiDraftScope.current) return;
+            const draft = aiDraft.current;
+            const { USE_SYSTEM_PROXY_FOR_AI: proxy, ...profile } = draft;
+            if (profile.OPENAI_API_TEMPERATURE !== undefined) {
+                const temperature = parseNumberText(profile.OPENAI_API_TEMPERATURE);
+                profile.OPENAI_API_TEMPERATURE = temperature !== null && temperature >= 0 && temperature <= 2
+                    ? String(temperature) : DEFAULT_OPENAI_TEMPERATURE;
+            }
             setElectronSaveStatus('saving');
-            setElectronSettings(prev => ({ ...prev, OPENAI_API_TEMPERATURE: temperature }));
-            const geminiKeyDraft = electronSettings.GEMINI_API_KEY.trim();
-            const openaiKeyDraft = electronSettings.OPENAI_API_KEY.trim();
-            const savedSettings = await electron.saveAiProfile({
-                AI_PROVIDER: electronSettings.AI_PROVIDER === 'openai' ? 'openai' : 'gemini',
-                AI_PROVIDER_PRESET: electronSettings.AI_PROVIDER_PRESET,
-                GEMINI_API_KEY: geminiKeyDraft,
-                GEMINI_API_MODEL: electronSettings.GEMINI_API_MODEL,
-                OPENAI_API_KEY: openaiKeyDraft,
-                OPENAI_API_URL: electronSettings.OPENAI_API_URL,
-                OPENAI_API_MODEL: electronSettings.OPENAI_API_MODEL,
-                OPENAI_API_TEMPERATURE: temperature,
-                OPENAI_API_STREAM: electronSettings.OPENAI_API_STREAM === true,
-            }).catch((error: unknown) => {
+            const savedSettings = await electron.saveAiProfile(profile).catch((error: unknown) => {
                 console.warn('[AiSettings] Could not save settings', error);
                 setElectronSaveStatus('idle');
                 return null;
             });
             if (!savedSettings) return;
-            await electron.saveSettings('USE_SYSTEM_PROXY_FOR_AI', electronSettings.USE_SYSTEM_PROXY_FOR_AI);
+            if (proxy !== undefined) await electron.saveSettings('USE_SYSTEM_PROXY_FOR_AI', proxy);
+            if (scope !== aiDraftScope.current) {
+                setElectronSaveStatus('idle');
+                return;
+            }
+            const currentDraft = aiDraft.current;
+            const changedWhileSaving = (Object.keys(currentDraft) as (keyof AiSettingsDraft)[])
+                .filter(key => currentDraft[key] !== draft[key]);
+            aiDraft.current = Object.fromEntries(changedWhileSaving.map(key => [key, currentDraft[key]]));
             window.dispatchEvent(new Event(AI_SETTINGS_CHANGED));
             const configuredKeys = savedSettings?.AI_API_KEYS_CONFIGURED;
             setSavedElectronAiCredentials({
-                AI_PROVIDER: electronSettings.AI_PROVIDER === 'openai' ? 'openai' : 'gemini',
+                AI_PROVIDER: savedSettings.AI_PROVIDER === 'openai' ? 'openai' : 'gemini',
                 GEMINI_API_KEY: configuredKeys?.GEMINI_API_KEY === true,
                 OPENAI_API_KEY: configuredKeys?.OPENAI_API_KEY === true,
                 OPENAI_API_KEY_ENDPOINT: typeof savedSettings?.OPENAI_API_KEY_ENDPOINT === 'string'
                     ? savedSettings.OPENAI_API_KEY_ENDPOINT
                     : null,
             });
-            // Drop the saved drafts so the field goes back to the "saved" placeholder; keep anything typed meanwhile.
             setElectronSettings(prev => ({
                 ...prev,
-                GEMINI_API_KEY: prev.GEMINI_API_KEY.trim() === geminiKeyDraft ? '' : prev.GEMINI_API_KEY,
-                OPENAI_API_KEY: prev.OPENAI_API_KEY.trim() === openaiKeyDraft ? '' : prev.OPENAI_API_KEY,
+                AI_PROVIDER: savedSettings.AI_PROVIDER ?? 'gemini',
+                AI_PROVIDER_PRESET: savedSettings.AI_PROVIDER_PRESET ?? '',
+                GEMINI_API_MODEL: savedSettings.GEMINI_API_MODEL ?? '',
+                OPENAI_API_URL: savedSettings.OPENAI_API_URL ?? '',
+                OPENAI_API_MODEL: savedSettings.OPENAI_API_MODEL ?? '',
+                OPENAI_API_TEMPERATURE: savedSettings.OPENAI_API_TEMPERATURE?.trim() || DEFAULT_OPENAI_TEMPERATURE,
+                OPENAI_API_STREAM: savedSettings.OPENAI_API_STREAM === true,
+                GEMINI_API_KEY: '',
+                OPENAI_API_KEY: '',
+                ...aiDraft.current,
             }));
             setElectronSaveStatus('saved');
             setTimeout(() => setElectronSaveStatus('idle'), 2000);
@@ -625,6 +658,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             [key]: settings?.AI_API_KEYS_CONFIGURED?.[key] === true,
             OPENAI_API_KEY_ENDPOINT: typeof settings?.OPENAI_API_KEY_ENDPOINT === 'string' ? settings.OPENAI_API_KEY_ENDPOINT : null,
         }));
+        aiDraft.current = { ...aiDraft.current, [key]: '' };
         setElectronSettings(prev => ({ ...prev, [key]: '' }));
     };
 
@@ -1180,7 +1214,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         OPENAI_API_KEY: savedElectronAiCredentials.OPENAI_API_KEY,
                     },
                     savedOpenAIKeyEndpoint: savedElectronAiCredentials.OPENAI_API_KEY_ENDPOINT,
-                    setElectronSettings,
+                    editAiSettings,
                     updateBadgeLabel,
                     updateStatus,
                 },

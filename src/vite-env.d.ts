@@ -828,7 +828,7 @@ declare global {
     electron?: {
       getSharedLoginOrigin?: () => Promise<string | null>;
       enrollSharedLogin?: (url: string, token: string, label: string) => Promise<{ status: number; body: unknown }>;
-      saveAiProfile?: (profile: Omit<AiSyncProfile, 'OPENAI_API_KEY_ENDPOINT'>) => Promise<PublicAiProfile>;
+      saveAiProfile?: (profile: Partial<Omit<AiSyncProfile, 'OPENAI_API_KEY_ENDPOINT'>>) => Promise<PublicAiProfile>;
       syncAiProfile?: (origin: string, deviceId: string) => Promise<{ status: string }>;
       requestSharedLogin?: (path: string, method: string, body?: string, expectedDevice?: string, connectionId?: string) => Promise<{ status: number; body: unknown; connectionId?: string | null }>;
       webUtils?: {

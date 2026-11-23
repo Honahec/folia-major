@@ -40,7 +40,7 @@ const getSetting = (db: SharedLoginDb, userId: string) => db.prepare(
     'SELECT value_json, updated_at FROM sync_settings WHERE user_id = ?',
 ).bind(userId).first<{ value_json: string; updated_at: string }>();
 
-const writeThemes = async (db: SharedLoginDb, userId: string, input: unknown) => {
+const writeThemes = async (db: SharedLoginDb, userId: string, input: unknown, confirmWrite: boolean) => {
     if (!Array.isArray(input) || input.length > maxThemes) return sharedLoginError('invalid_themes', 400);
     const records = [];
     for (const value of input) {
@@ -55,7 +55,7 @@ const writeThemes = async (db: SharedLoginDb, userId: string, input: unknown) =>
             hashSyncString(`${item.fingerprint}\u0000${updatedAt}`),
         ]);
     }
-    await db.prepare(`
+    const { results } = await db.prepare(`
         INSERT INTO sync_themes (user_id, fingerprint, bucket_id, theme_json, source, updated_at, digest)
         SELECT ?, value ->> 0, value ->> 1, value -> 2, value ->> 3, value ->> 4, value ->> 5
         FROM json_each(?) WHERE true
@@ -63,8 +63,11 @@ const writeThemes = async (db: SharedLoginDb, userId: string, input: unknown) =>
             theme_json = excluded.theme_json, source = excluded.source,
             updated_at = excluded.updated_at, digest = excluded.digest
         WHERE excluded.updated_at >= sync_themes.updated_at
-    `).bind(userId, JSON.stringify(records)).run();
-    return sharedLoginJson({ ok: true, savedCount: records.length });
+        RETURNING fingerprint
+    `).bind(userId, JSON.stringify(records)).all<{ fingerprint: string }>();
+    const savedCount = results.length;
+    if (confirmWrite && savedCount !== records.length) return sharedLoginError('themes_changed', 409);
+    return sharedLoginJson({ ok: true, savedCount });
 };
 
 export const handleUserSync = async (request: Request, db: SharedLoginDb, userId: string, path: string): Promise<Response> => {
@@ -90,11 +93,12 @@ export const handleUserSync = async (request: Request, db: SharedLoginDb, userId
                 return sharedLoginError('invalid_settings', 400);
             }
             const updatedAt = new Date(body.updatedAt).toISOString();
-            await db.prepare(`
+            const result = await db.prepare(`
                 INSERT INTO sync_settings (user_id, value_json, updated_at) VALUES (?, ?, ?)
                 ON CONFLICT(user_id) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at
                 WHERE excluded.updated_at >= sync_settings.updated_at
-            `).bind(userId, JSON.stringify({ ...body, updatedAt }), updatedAt).run();
+            `).bind(userId, JSON.stringify({ schemaVersion, updatedAt, data: body.data }), updatedAt).run();
+            if (body.confirmWrite === true && result.meta.changes !== 1) return sharedLoginError('settings_changed', 409);
             return sharedLoginJson({ ok: true });
         }
         case 'GET /themes/manifest': {
@@ -108,7 +112,7 @@ export const handleUserSync = async (request: Request, db: SharedLoginDb, userId
             return sharedLoginJson({ schemaVersion, bucketCount: THEME_BUCKET_COUNT, buckets });
         }
         case 'POST /themes/put':
-            return writeThemes(db, userId, body?.themes);
+            return writeThemes(db, userId, body?.themes, body?.confirmWrite === true);
         case 'POST /themes/get':
         case 'POST /themes/bucket': {
             const byBucket = path === '/themes/bucket';

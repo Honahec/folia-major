@@ -60,4 +60,17 @@ describe('unified Worker sync', () => {
         expect(await (await a('/sync/themes/get', 'POST', { fingerprints: ['one'] })).json()).toEqual({ themes: [updated] });
         expect(await (await a('/sync/state')).json()).toMatchObject({ themeCount: 1 });
     });
+
+    it('reports when a newer write supersedes a confirmed archive import', async () => {
+        const a = await enroll('a');
+        const record = { schemaVersion: 1, updatedAt: '2026-11-22T10:00:00.000Z', data: { backgroundOpacity: 0.5 } };
+        const latest = { ...record, updatedAt: '2026-11-22T11:00:00.000Z' };
+        await a('/sync/settings', 'PUT', latest);
+        expect((await a('/sync/settings', 'PUT', { ...record, confirmWrite: true })).status).toBe(409);
+        expect(await (await a('/sync/settings')).json()).toEqual(latest);
+        const theme = { fingerprint: 'one', theme: { color: 'blue' }, updatedAt: latest.updatedAt };
+        expect(await (await a('/sync/themes/put', 'POST', { themes: [theme], confirmWrite: true })).json())
+            .toEqual({ ok: true, savedCount: 1 });
+        expect((await a('/sync/themes/put', 'POST', { themes: [{ ...theme, updatedAt: record.updatedAt }], confirmWrite: true })).status).toBe(409);
+    });
 });

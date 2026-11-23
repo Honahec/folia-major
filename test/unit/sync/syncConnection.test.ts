@@ -37,6 +37,28 @@ it('keeps a rejected device session distinct from a temporary discovery failure'
     expect(getSharedLoginState().discoveryUnavailable).toBeFalsy();
 });
 
+it('clears the matching saved account when this device disconnects', async () => {
+    const origin = 'https://folia.example';
+    const device = { id: 'desktop', label: 'Mac' };
+    const deviceOrigin = vi.fn().mockResolvedValueOnce(origin).mockResolvedValue(null);
+    const requestSharedLogin = vi.fn()
+        .mockResolvedValueOnce({ status: 200, body: { ...device, accountId: 'owner' } })
+        .mockResolvedValueOnce({ status: 200, body: { ok: true } });
+    const local = new Map([['folia_sync_config_v1', JSON.stringify({ enabled: true, workerBaseUrl: origin, deviceId: device.id, accountId: 'owner' })]]);
+    vi.stubGlobal('window', Object.assign(new EventTarget(), {
+        electron: { getSharedLoginOrigin: deviceOrigin, requestSharedLogin },
+        localStorage: { getItem: (key: string) => local.get(key) ?? null, setItem: (key: string, value: string) => local.set(key, value) },
+    }));
+    const { initializeSharedLogin, getSharedLoginState, revokeSharedLoginDevice } = await import('../../../src/services/sync/sharedLoginClient');
+    const { getSyncConfig } = await import('../../../src/services/sync/syncConfig');
+    await initializeSharedLogin();
+    await expect(revokeSharedLoginDevice(device.id)).resolves.toBe(true);
+    expect(getSyncConfig()).toMatchObject({ enabled: false, workerBaseUrl: origin, deviceId: undefined, accountId: undefined });
+    await initializeSharedLogin();
+    expect(getSharedLoginState()).toMatchObject({ device: null, origin: null });
+    expect(getSharedLoginState().discoveryUnavailable).toBeFalsy();
+});
+
 it('retries when desktop credentials are temporarily unreadable at startup', async () => {
     const origin = 'https://folia.example';
     const device = { id: 'desktop', label: 'Mac' };

@@ -36,9 +36,10 @@ const createAiProfileSync = ({ store, credentials, device }) => {
     };
 
     const saveLocal = (draft) => {
-        const normalized = parseAiSyncProfile({ ...draft, [OPENAI_BINDING]: '' });
-        if (!normalized) return false;
+        if (!draft || typeof draft !== 'object' || Array.isArray(draft)) return false;
         const previous = readProfile();
+        const normalized = parseAiSyncProfile({ ...previous, GEMINI_API_KEY: '', OPENAI_API_KEY: '', ...draft, [OPENAI_BINDING]: '' });
+        if (!normalized) return false;
         for (const key of AI_PROFILE_FIELDS) {
             if (key !== OPENAI_BINDING && !KEY_FIELDS.includes(key) && normalized[key] !== previous[key]) {
                 store.set(key, normalized[key]);

@@ -119,10 +119,10 @@ export const getRemoteSettings = async (config: SyncProviderConfig): Promise<Syn
     parseSyncedSettingsRecord(await requestJson(config, '/settings'))
 );
 
-export const putRemoteSettings = async (config: SyncProviderConfig, record: SyncedSettingsRecord) => {
+export const putRemoteSettings = async (config: SyncProviderConfig, record: SyncedSettingsRecord, confirmWrite = false) => {
     await requestJson(config, '/settings', {
         method: 'PUT',
-        body: JSON.stringify(record),
+        body: JSON.stringify(confirmWrite && config.deviceId ? { ...record, confirmWrite } : record),
     });
 };
 
@@ -146,6 +146,7 @@ export const getRemoteThemes = async (
 export const putRemoteThemes = async (
     config: SyncProviderConfig,
     themes: SyncedThemeRecord[],
+    confirmWrite = false,
 ) => {
     if (themes.length === 0) {
         return;
@@ -153,7 +154,7 @@ export const putRemoteThemes = async (
 
     await requestJson(config, '/themes/put', {
         method: 'POST',
-        body: JSON.stringify({ themes }),
+        body: JSON.stringify(confirmWrite && config.deviceId ? { themes, confirmWrite } : { themes }),
     });
 };
 

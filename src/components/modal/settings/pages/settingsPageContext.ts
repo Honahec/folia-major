@@ -1,5 +1,4 @@
 import { createContext, useContext } from 'react';
-import type React from 'react';
 import type { NowPlayingConnectionStatus, ReplayGainMode, StageSource, StageStatus, ThemeMode } from '../../../../types';
 import type { LyricApiStatus } from '../../../../types/lyricApi';
 import type { NavidromeServerProfile } from '../../../../types/navidrome';
@@ -7,6 +6,7 @@ import type { ObsBrowserSourceStatus } from '../../../../types/obsBrowserSource'
 import type { PlayerCapConnectionStatus } from '../../../../types/playerCap';
 import type { ThemeGenerationSource } from '../../../../services/themePreferences';
 import type { ConfigThemeControls } from './storage/visualConfigTransfer';
+import type { AiSyncProfile } from '../../../../../shared/ai/syncProfile.cjs';
 
 // src/components/modal/settings/pages/settingsPageContext.ts
 // What a settings page gets from the dialog. A setting that lives in a store is read from its store
@@ -18,6 +18,10 @@ export type CacheCategory = 'playlist' | 'lyrics' | 'cover' | 'media' | 'analysi
 
 /** A provider key the desktop app keeps in its main process. */
 export type AiApiKeyName = 'GEMINI_API_KEY' | 'OPENAI_API_KEY';
+
+export type AiSettingsDraft = Partial<Omit<AiSyncProfile, 'OPENAI_API_KEY_ENDPOINT'> & {
+    USE_SYSTEM_PROXY_FOR_AI: boolean;
+}>;
 
 /** The desktop app's settings file, as far as the settings dialog reads and writes it. */
 export type ElectronSettingsState = {
@@ -164,7 +168,7 @@ export type SettingsPageContextValue = {
                 savedAiApiKeys: Record<AiApiKeyName, boolean>;
                 /** The endpoint the saved OpenAI-compatible key is sent to, and only to. */
                 savedOpenAIKeyEndpoint: string | null;
-                setElectronSettings: React.Dispatch<React.SetStateAction<ElectronSettingsState>>;
+                editAiSettings: (patch: AiSettingsDraft) => void;
                 /** The update state in a few words, for the button that checks again. */
                 updateBadgeLabel: string;
                 updateStatus: ElectronUpdateStatus | null;

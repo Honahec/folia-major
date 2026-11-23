@@ -509,10 +509,10 @@ export const mergeLocalThemesIntoRecords = async (
     return Array.from(recordMap.values()).sort((a, b) => a.fingerprint.localeCompare(b.fingerprint));
 };
 
-export const saveSyncLibraryBundleToLocalCache = async (bundle: SyncLibraryExportBundle) => {
+export const saveSyncLibraryBundleToLocalCache = async (bundle: SyncLibraryExportBundle, remoteScope?: string) => {
     const registryRecords: NonNullable<Awaited<ReturnType<typeof saveRemoteThemeToLocalCache>>>[] = [];
     for (const record of bundle.themes) {
-        const registryRecord = await saveRemoteThemeToLocalCache(record, undefined, true);
+        const registryRecord = await saveRemoteThemeToLocalCache(record, undefined, true, remoteScope);
         if (registryRecord) {
             registryRecords.push(registryRecord);
         }
@@ -528,11 +528,12 @@ export const pushSyncLibraryBundleToRemote = async (bundle: SyncLibraryExportBun
     }
 
     if (bundle.settings) {
-        await putRemoteSettings(config, bundle.settings);
+        ensureSyncConfigCurrent(config);
+        await putRemoteSettings(config, bundle.settings, true);
     }
     for (let index = 0; index < bundle.themes.length; index += THEME_BATCH_SIZE) {
-        await putRemoteThemes(config, bundle.themes.slice(index, index + THEME_BATCH_SIZE));
+        ensureSyncConfigCurrent(config);
+        await putRemoteThemes(config, bundle.themes.slice(index, index + THEME_BATCH_SIZE), true);
     }
-    setSyncStatus({ state: 'success', lastSyncAt: new Date().toISOString(), lastError: null });
     return true;
 };

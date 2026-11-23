@@ -1,4 +1,4 @@
-import { getSyncConfig } from './syncConfig';
+import { getSyncConfig, saveSyncConfig, setSyncStatus } from './syncConfig';
 
 // Connect this device to a shared login server without retaining the enrollment token.
 
@@ -173,6 +173,15 @@ export const revokeSharedLoginDevice = async (id: string): Promise<boolean> => {
     const current = previous.device?.id === id;
     const result = await requestSharedLogin(current ? '/device' : `/devices/${encodeURIComponent(id)}`, 'DELETE');
     if (result.status !== 200) return false;
-    if (current && previous === state) publish({ ...state, device: null });
+    if (current && state.origin === previous.origin && (!state.device || state.device.id === id)) {
+        discoveryGeneration++;
+        loading = undefined;
+        publish({ available: state.available, device: null, origin: state.origin, providers: state.providers });
+    }
+    const config = getSyncConfig();
+    if (current && config.deviceId === id && config.workerBaseUrl === previous.origin) {
+        saveSyncConfig({ ...config, enabled: false, authToken: '', deviceId: undefined, accountId: undefined });
+        setSyncStatus({ state: 'idle', lastSyncAt: null, lastError: null });
+    }
     return true;
 };

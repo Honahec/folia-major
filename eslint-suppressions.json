@@ -2827,9 +2827,6 @@
     "@typescript-eslint/no-misused-promises": {
       "count": 2
     },
-    "@typescript-eslint/no-unnecessary-boolean-literal-compare": {
-      "count": 1
-    },
     "@typescript-eslint/no-unnecessary-condition": {
       "count": 11
     },
