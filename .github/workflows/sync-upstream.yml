@@ -1,0 +1,39 @@
+name: Sync upstream stable release
+
+on:
+  schedule:
+    - cron: '17 1 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-upstream-stable
+  cancel-in-progress: false
+
+jobs:
+  open-pr:
+    if: github.repository == 'Honahec/folia-major' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Check out the fork
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Prepare the integration pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPSTREAM_REPOSITORY: chthollyphile/folia-major
+          UPSTREAM_GIT_URL: https://github.com/chthollyphile/folia-major.git
+        run: bash dev/upstreamSync/syncStableRelease.sh

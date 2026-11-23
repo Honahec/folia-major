@@ -75,5 +75,5 @@ jobs:
             exit 0
           fi
           test -n "$CLOUDFLARE_API_TOKEN"
-          npx --yes wrangler@4.165.0 d1 migrations apply folia-shared-login --remote
-          npx --yes wrangler@4.165.0 deploy
+          npx --yes wrangler@4.165.0 d1 migrations apply folia-shared-login --config wrangler.jsonc --remote
+          npx --yes wrangler@4.165.0 deploy --config wrangler.jsonc

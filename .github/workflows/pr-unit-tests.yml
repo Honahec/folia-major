@@ -70,6 +70,16 @@ jobs:
       - name: Run unit tests
         run: npm run test:unit
 
+      - name: Verify the Worker on upstream integration PRs
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'sync/upstream-')
+        env:
+          VITE_QQ_API_BASE: /api/qq
+          WORKERS_CI: '1'
+        run: |
+          npm exec -- vite build
+          npx --yes wrangler@4.165.0 d1 migrations apply folia-shared-login --config wrangler.jsonc --local --persist-to "$RUNNER_TEMP/upstream-d1"
+          npx --yes wrangler@4.165.0 deploy --config wrangler.jsonc --dry-run --outdir "$RUNNER_TEMP/upstream-worker"
+
   lint:
     name: Lint
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false

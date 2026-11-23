@@ -212,6 +212,9 @@ jobs:
             build/mnn
           key: mnn-${{ runner.os }}-${{ hashFiles('build/buildMnnRuntime.mjs', 'native/folia-mnn/**') }}
 
+      - name: Build bundled sources when provided by this version
+        run: npm run --if-present sources:build
+
       - name: Package Electron app
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
