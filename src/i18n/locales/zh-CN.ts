@@ -4340,6 +4340,25 @@ export default {
         "description": "登录后，自己创建的不公开歌单也能读取歌曲，并支持真正的分页加载。自建后端需要升级到 qq-music-api 3.1.2 或更新版本；旧后端会自动回退，读不到时会明确提示「不是公开歌单」，不再静默显示为空。"
       }
     },
+    "v0_7_29_fork_3": {
+      "intro": "基于 Folia v0.7.29。",
+      "automaticSync": {
+        "title": "外观和 AI 主题自动同步",
+        "description": "已连接的设备会在启动、回到前台和恢复联网时同步。"
+      },
+      "aiServices": {
+        "title": "AI 服务设置随账号同步",
+        "description": "在桌面端保存服务商、模型和 API 密钥，其他设备即可使用。"
+      },
+      "deviceNames": {
+        "title": "给设备改名",
+        "description": "在「同步服务」中修改当前设备的名称，方便在设备列表中辨认。"
+      },
+      "qqPlayback": {
+        "title": "修复 QQ 音乐启动时的 401 提示",
+        "description": "PWA 恢复上次播放前会等 QQ 音乐共享登录检查完成。"
+      }
+    },
     "v0_7_29_fork_2": {
       "intro": "此版本基于 Folia v0.7.29。",
       "sharedLogin": {

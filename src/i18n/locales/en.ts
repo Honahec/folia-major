@@ -4340,6 +4340,25 @@ export default {
         "description": "When signed in, your own private playlists now load their songs, with real paging. Self-hosted backends must run qq-music-api 3.1.2 or later; older backends fall back automatically, and a playlist that cannot be read now says it is not public instead of silently showing as empty."
       }
     },
+    "v0_7_29_fork_3": {
+      "intro": "Based on Folia v0.7.29.",
+      "automaticSync": {
+        "title": "Automatic appearance and AI theme sync",
+        "description": "Connected devices sync on startup, when returning to the foreground, and when reconnecting."
+      },
+      "aiServices": {
+        "title": "Sync AI service settings",
+        "description": "Save your provider, model, and API keys in the desktop app to use them on other devices."
+      },
+      "deviceNames": {
+        "title": "Rename your device",
+        "description": "Change the name of this device in Sync Server settings to recognize it in the device list."
+      },
+      "qqPlayback": {
+        "title": "Fixed a QQ Music 401 on startup",
+        "description": "The PWA waits for the shared QQ Music sign-in check before restoring playback."
+      }
+    },
     "v0_7_29_fork_2": {
       "intro": "This Folia release is based on v0.7.29.",
       "sharedLogin": {

@@ -4340,6 +4340,25 @@ export default {
         "description": "Setelah masuk, playlist pribadi buatan Anda kini dapat memuat lagu dengan paging sungguhan. Backend yang di-host sendiri harus memakai qq-music-api 3.1.2 atau lebih baru; backend lama beralih otomatis, dan playlist yang tidak dapat dibaca kini menjelaskan bahwa playlist itu tidak publik, alih-alih tampil kosong tanpa keterangan."
       }
     },
+    "v0_7_29_fork_3": {
+      "intro": "Berdasarkan Folia v0.7.29.",
+      "automaticSync": {
+        "title": "Sinkronisasi tampilan dan tema AI otomatis",
+        "description": "Perangkat terhubung melakukan sinkronisasi saat aplikasi dibuka, kembali aktif, atau tersambung lagi."
+      },
+      "aiServices": {
+        "title": "Sinkronkan pengaturan layanan AI",
+        "description": "Simpan penyedia, model, dan kunci API di aplikasi desktop agar dapat digunakan di perangkat lain."
+      },
+      "deviceNames": {
+        "title": "Ubah nama perangkat",
+        "description": "Ubah nama perangkat ini di pengaturan Server Sinkronisasi agar mudah ditemukan dalam daftar."
+      },
+      "qqPlayback": {
+        "title": "Perbaikan galat 401 QQ Music saat aplikasi dibuka",
+        "description": "PWA menunggu pemeriksaan login bersama QQ Music sebelum memulihkan pemutaran."
+      }
+    },
     "v0_7_29_fork_2": {
       "intro": "Rilis Folia ini berbasis v0.7.29.",
       "sharedLogin": {

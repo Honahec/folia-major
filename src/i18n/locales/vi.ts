@@ -4340,6 +4340,25 @@ export default {
         "description": "Sau khi đăng nhập, danh sách phát riêng tư của bạn nay có thể tải bài hát với phân trang thực tế. Máy chủ tự lưu trữ cần chạy qq-music-api 3.1.2 trở lên; phiên bản cũ hơn sẽ tự động quay về cơ chế dự phòng, và danh sách phát không đọc được sẽ báo rõ là danh sách không công khai thay vì hiển thị trống."
       }
     },
+    "v0_7_29_fork_3": {
+      "intro": "Dựa trên Folia v0.7.29.",
+      "automaticSync": {
+        "title": "Tự động đồng bộ giao diện và chủ đề AI",
+        "description": "Thiết bị đã kết nối sẽ đồng bộ khi mở ứng dụng, quay lại ứng dụng hoặc có mạng trở lại."
+      },
+      "aiServices": {
+        "title": "Đồng bộ cài đặt dịch vụ AI",
+        "description": "Lưu nhà cung cấp, mô hình và khóa API trên ứng dụng máy tính để dùng trên các thiết bị khác."
+      },
+      "deviceNames": {
+        "title": "Đổi tên thiết bị",
+        "description": "Đổi tên thiết bị này trong mục Máy chủ đồng bộ để dễ nhận ra trong danh sách."
+      },
+      "qqPlayback": {
+        "title": "Sửa lỗi QQ Music báo 401 khi mở ứng dụng",
+        "description": "PWA chờ kiểm tra đăng nhập QQ Music dùng chung trước khi khôi phục phát nhạc."
+      }
+    },
     "v0_7_29_fork_2": {
       "intro": "Bản Folia này dựa trên v0.7.29.",
       "sharedLogin": {
