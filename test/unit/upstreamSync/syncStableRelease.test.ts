@@ -30,9 +30,10 @@ const fixture = (conflict = false) => {
     git('config', 'user.email', 'test@example.test');
 
     const write = (file: string, value: string) => writeFileSync(join(repo, file), value);
-    const metadata = (version: string, owner: string, dependency: string) => {
-        write('package.json', JSON.stringify({ version, build: { publish: [{ owner }] }, dependencies: { example: dependency } }, null, 2) + '\n');
-        write('package-lock.json', JSON.stringify({ version, packages: { '': { version, dependencies: { example: dependency } } } }, null, 2) + '\n');
+    const metadata = (version: string, owner: string, dependency: string, forkDependency = false) => {
+        const dependencies = { example: dependency, sharedA: '1', sharedB: '1', sharedC: '1', ...(forkDependency ? { forkOnly: '1' } : {}) };
+        write('package.json', JSON.stringify({ version, build: { publish: [{ owner }] }, dependencies }, null, 2) + '\n');
+        write('package-lock.json', JSON.stringify({ version, packages: { '': { version, dependencies } } }, null, 2) + '\n');
         write('realeco-release', version + '\n');
     };
     mkdirSync(join(repo, 'electron'));
@@ -70,7 +71,7 @@ const fixture = (conflict = false) => {
     git('push', upstream, 'refs/tags/v1.2.10');
 
     git('switch', 'main');
-    metadata('1.2.9-fork.3', 'fork', '1');
+    metadata('1.2.9-fork.3', 'fork', '1', true);
     write('electron/main.cjs', "const FOLIA_RELEASES_URL = 'fork';\nconst FOLIA_GITHUB_REPOSITORY = {\n  owner: 'fork',\n};\n");
     write('.github/protected.yml', 'fork workflow\n');
     write('wrangler.jsonc', 'fork config\n');
@@ -117,10 +118,10 @@ describe.skipIf(process.platform === 'win32')('scheduled upstream sync', () => {
         expect(JSON.parse(git('show', branch + ':sync-server/package.json'))).toMatchObject({ version: '1.2.9' });
         expect(JSON.parse(git('show', branch + ':sync-server/package-lock.json'))).toMatchObject({ version: '1.2.9', packages: { '': { version: '1.2.9' } } });
         expect(JSON.parse(git('show', branch + ':package.json'))).toMatchObject({
-            version: '1.2.9-fork.3', build: { publish: [{ owner: 'fork' }] }, dependencies: { example: '2' },
+            version: '1.2.9-fork.3', build: { publish: [{ owner: 'fork' }] }, dependencies: { example: '2', forkOnly: '1' },
         });
         expect(JSON.parse(git('show', branch + ':package-lock.json'))).toMatchObject({
-            version: '1.2.9-fork.3', packages: { '': { version: '1.2.9-fork.3', dependencies: { example: '2' } } },
+            version: '1.2.9-fork.3', packages: { '': { version: '1.2.9-fork.3', dependencies: { example: '2', forkOnly: '1' } } },
         });
         expect(git('ls-remote', '--tags', 'origin')).toBe('');
         expect(readFileSync(summary, 'utf8')).toContain('Opened the integration pull request');

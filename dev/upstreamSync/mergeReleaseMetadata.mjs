@@ -24,18 +24,18 @@ for (const filename of ['package.json', 'package-lock.json', 'sync-server/packag
     if (conflicts) {
         const stages = [...conflicts.matchAll(/^100644 [a-f0-9]+ ([123])\t/gm)].map(match => match[1]);
         if (stages.join('') !== '123') continue;
-        const paths = stages.map(stage => {
+        const [basePath, forkPath, upstreamPath] = stages.map(stage => {
             const path = join(scratch, filename.replace('/', '-') + '.' + stage);
             writeFileSync(path, normalize(readAt(':' + stage, filename), filename));
             return path;
         });
         try {
-            execFileSync('git', ['merge-file', ...paths], { stdio: 'ignore' });
+            execFileSync('git', ['merge-file', forkPath, basePath, upstreamPath], { stdio: 'ignore' });
         } catch (error) {
             if (typeof error.status !== 'number' || error.status < 1 || error.status > 127) throw error;
             continue;
         }
-        writeFileSync(filename, readFileSync(paths[0]));
+        writeFileSync(filename, readFileSync(forkPath));
     } else {
         if (!lstatSync(filename).isFile()) throw new Error(filename + ' must be a regular file');
         writeFileSync(filename, normalize(JSON.parse(readFileSync(filename, 'utf8')), filename));
