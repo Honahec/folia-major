@@ -56,6 +56,17 @@ body:lang(vi) {
   font-family: 'Inter', "Segoe UI", system-ui, var(--font-cjk-sans), sans-serif;
 }
 
+@layer base {
+  /* Give nested scroll areas the same zoom restriction and let each control define its own touch action. */
+  :where(html[data-pwa], html[data-pwa] *) {
+    touch-action: pan-x pan-y;
+  }
+
+  :where(html[data-pwa]) {
+    overscroll-behavior: none;
+  }
+}
+
 /* 播放页空闲时隐藏鼠标指针。挂点在播放页的视觉层容器上，弹窗和浮动控件都在它外面，
    不会被波及，所以不需要 !important。
    后代选择器压得住 Tailwind 的 cursor-* 靠的不是特异性，而是这条规则**不在任何

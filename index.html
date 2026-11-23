@@ -3,6 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      if (window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true) {
+        // Set the zoom limit before the installed app draws its first frame.
+        document.documentElement.setAttribute('data-pwa', '');
+        document.querySelector('meta[name="viewport"]').content += ', maximum-scale=1, user-scalable=no';
+
+        // Trackpads can report pinches as wheel events in Chromium or gesture events in WebKit.
+        window.addEventListener('wheel', (event) => {
+          if (event.ctrlKey) event.preventDefault();
+        }, { capture: true, passive: false });
+        window.addEventListener('gesturestart', (event) => event.preventDefault(), { capture: true, passive: false });
+        window.addEventListener('gesturechange', (event) => event.preventDefault(), { capture: true, passive: false });
+      }
+    </script>
     <meta name="referrer" content="no-referrer" />
     <meta name="description" content="一个动态歌词播放器，支持 AI 主题生成" />
     <meta name="theme-color" content="#09090b" />
