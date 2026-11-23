@@ -4340,6 +4340,17 @@ export default {
         "description": "Setelah masuk, playlist pribadi buatan Anda kini dapat memuat lagu dengan paging sungguhan. Backend yang di-host sendiri harus memakai qq-music-api 3.1.2 atau lebih baru; backend lama beralih otomatis, dan playlist yang tidak dapat dibaca kini menjelaskan bahwa playlist itu tidak publik, alih-alih tampil kosong tanpa keterangan."
       }
     },
+    "v0_7_29_fork_4": {
+      "intro": "Berdasarkan Folia v0.7.29.",
+      "startupPlayback": {
+        "title": "Pemutaran NetEase lebih andal saat aplikasi dibuka",
+        "description": "Saat Folia dibuka kembali, aplikasi memeriksa sesi NetEase bersama sebelum meminta audio untuk menghindari pesan 404 yang keliru."
+      },
+      "sharedSignIn": {
+        "title": "Sesi bersama tetap tersimpan",
+        "description": "Gangguan sinkronisasi sementara atau hasil pemeriksaan akun yang berbeda tidak lagi memicu pesan bahwa sesi Anda kedaluwarsa."
+      }
+    },
     "v0_7_29_fork_3": {
       "intro": "Berdasarkan Folia v0.7.29.",
       "automaticSync": {

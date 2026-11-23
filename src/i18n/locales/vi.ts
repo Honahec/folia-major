@@ -4340,6 +4340,17 @@ export default {
         "description": "Sau khi đăng nhập, danh sách phát riêng tư của bạn nay có thể tải bài hát với phân trang thực tế. Máy chủ tự lưu trữ cần chạy qq-music-api 3.1.2 trở lên; phiên bản cũ hơn sẽ tự động quay về cơ chế dự phòng, và danh sách phát không đọc được sẽ báo rõ là danh sách không công khai thay vì hiển thị trống."
       }
     },
+    "v0_7_29_fork_4": {
+      "intro": "Dựa trên Folia v0.7.29.",
+      "startupPlayback": {
+        "title": "Phát nhạc NetEase ổn định hơn khi mở ứng dụng",
+        "description": "Khi mở lại Folia, ứng dụng kiểm tra phiên đăng nhập NetEase dùng chung trước khi yêu cầu âm thanh để tránh báo lỗi 404 nhầm."
+      },
+      "sharedSignIn": {
+        "title": "Giữ phiên đăng nhập dùng chung",
+        "description": "Gián đoạn đồng bộ tạm thời hoặc kết quả kiểm tra tài khoản không khớp sẽ không còn khiến Folia báo phiên đăng nhập đã hết hạn."
+      }
+    },
     "v0_7_29_fork_3": {
       "intro": "Dựa trên Folia v0.7.29.",
       "automaticSync": {

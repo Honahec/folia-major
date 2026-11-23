@@ -4340,6 +4340,17 @@ export default {
         "description": "When signed in, your own private playlists now load their songs, with real paging. Self-hosted backends must run qq-music-api 3.1.2 or later; older backends fall back automatically, and a playlist that cannot be read now says it is not public instead of silently showing as empty."
       }
     },
+    "v0_7_29_fork_4": {
+      "intro": "Based on Folia v0.7.29.",
+      "startupPlayback": {
+        "title": "More reliable NetEase playback on startup",
+        "description": "When you reopen Folia, it checks the shared NetEase sign-in before requesting audio to avoid a false 404."
+      },
+      "sharedSignIn": {
+        "title": "Keep your shared sign-in",
+        "description": "A temporary sync outage or conflicting account checks no longer make Folia report that your sign-in expired."
+      }
+    },
     "v0_7_29_fork_3": {
       "intro": "Based on Folia v0.7.29.",
       "automaticSync": {

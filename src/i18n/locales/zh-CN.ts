@@ -4340,6 +4340,17 @@ export default {
         "description": "登录后，自己创建的不公开歌单也能读取歌曲，并支持真正的分页加载。自建后端需要升级到 qq-music-api 3.1.2 或更新版本；旧后端会自动回退，读不到时会明确提示「不是公开歌单」，不再静默显示为空。"
       }
     },
+    "v0_7_29_fork_4": {
+      "intro": "基于 Folia v0.7.29。",
+      "startupPlayback": {
+        "title": "修复网易云启动时的 404 提示",
+        "description": "重新打开 Folia 恢复播放时，应用会先检查网易云共享登录状态，再请求音源。"
+      },
+      "sharedSignIn": {
+        "title": "保留共享登录状态",
+        "description": "同步服务暂时连不上，或两次账号检查结果不一致时，应用会保留登录状态，避免误报登录过期。"
+      }
+    },
     "v0_7_29_fork_3": {
       "intro": "基于 Folia v0.7.29。",
       "automaticSync": {

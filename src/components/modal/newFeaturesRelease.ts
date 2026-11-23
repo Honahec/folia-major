@@ -1,4 +1,4 @@
-import { Cloud, KeyRound, Monitor, Music2 } from 'lucide-react';
+import { KeyRound, Music2 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 // src/components/modal/newFeaturesRelease.ts
@@ -18,11 +18,9 @@ type NewFeaturesRelease = {
 
 // Defines the current release's cards; their localized text lives under i18nKey in every locale.
 export const NEW_FEATURES_RELEASE: NewFeaturesRelease = {
-    i18nKey: 'releaseNotes.v0_7_29_fork_3',
+    i18nKey: 'releaseNotes.v0_7_29_fork_4',
     features: [
-        { id: 'automaticSync', icon: Cloud },
-        { id: 'aiServices', icon: KeyRound },
-        { id: 'deviceNames', icon: Monitor },
-        { id: 'playbackRestore', icon: Music2 },
+        { id: 'startupPlayback', icon: Music2 },
+        { id: 'sharedSignIn', icon: KeyRound },
     ],
 };
