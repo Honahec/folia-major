@@ -5,7 +5,7 @@ import { readProviderSessionValue, removeProviderSessionValue, writeProviderSess
 import { withLoginRequestLimit } from '../login/loginRequestLimit';
 import { withOnlineRequestLimit } from '../failure/onlineRequestLimit';
 import { lyricProxyWebUrl } from '../../lyricProxy';
-import { getSharedLoginState, initializeSharedLogin, requestSharedLogin } from '../../sync/sharedLoginClient';
+import { getSharedLoginState, initializeSharedLogin, requestSharedLogin, type SharedLoginDevice } from '../../sync/sharedLoginClient';
 import { errorMessage } from '../../../utils/errorText';
 
 // src/services/onlineMusic/qq/qqTransport.ts
@@ -241,6 +241,49 @@ const tokenFromCookieString = (cookie: string): string => {
 const isSameOriginBase = (base: string): boolean => base.startsWith('/');
 
 let sharedQqAccount: { deviceId: string; connectionId: string; accountId: string } | null = null;
+let sharedQqStatus: { deviceId: string; pending: ReturnType<typeof requestSharedLogin> } | null = null;
+let sharedQqRevision = 0;
+
+const ensureSharedQqDevice = (device: SharedLoginDevice) => {
+    const current = getSharedLoginState();
+    if (current.device?.id !== device.id) {
+        throw new OnlineProviderError(current.deviceLost ? 'auth-required' : 'unavailable', 'Shared login device changed', 'qq');
+    }
+};
+
+const ensureSharedQqRevision = (revision: number) => {
+    if (sharedQqRevision !== revision) {
+        throw new OnlineProviderError('unavailable', 'QQ Music changed during the shared account check', 'qq');
+    }
+};
+
+// Restoring a song can reach the transport before the startup account read. Let both use the same check.
+const readSharedQqStatus = (device: SharedLoginDevice) => {
+    if (sharedQqStatus?.deviceId === device.id) return sharedQqStatus.pending;
+    const revision = sharedQqRevision;
+    const pending = withOnlineRequestLimit(signal =>
+        requestSharedLogin('/qq/login/status', 'GET', undefined, signal, undefined, device.id), 30_000,
+    ).then(result => {
+        ensureSharedQqDevice(device);
+        ensureSharedQqRevision(revision);
+        const reply = result.body as { data?: { profile?: unknown } } | null;
+        const profile = result.status === 200 ? reply?.data?.profile : null;
+        if (profile) {
+            const accountId = String(normalizeQqUser(profile).id || '');
+            if (!accountId || !result.connectionId) {
+                throw new OnlineProviderError('invalid-response', 'QQ Music did not return a shared account connection', 'qq');
+            }
+            sharedQqAccount = { deviceId: device.id, connectionId: result.connectionId, accountId };
+        } else if (result.status === 200 || result.status === 401) {
+            sharedQqAccount = null;
+        }
+        return result;
+    }).finally(() => {
+        if (sharedQqStatus?.pending === pending) sharedQqStatus = null;
+    });
+    sharedQqStatus = { deviceId: device.id, pending };
+    return pending;
+};
 
 export const usesSharedQqSession = (): boolean => {
     const state = getSharedLoginState();
@@ -477,7 +520,12 @@ export const requestQq = async <T = unknown>(
     const init: RequestInit = isPost
         ? { method: 'POST', credentials, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }
         : { credentials, headers };
-    const sendShared = async (device: NonNullable<typeof sharedDevice>, signal?: AbortSignal) => {
+    const sharedAnswer = (result: Awaited<ReturnType<typeof requestSharedLogin>>) => ({
+        response: new Response(null, { status: result.status }),
+        body: result.body,
+    });
+    const sendShared = async (device: SharedLoginDevice, signal?: AbortSignal) => {
+        ensureSharedQqDevice(device);
         const method = operation === 'logout' ? 'DELETE' : isPost ? 'POST' : 'GET';
         const path = operation === 'logout' ? '/qq/connection' : `/qq${endpoint.path}?${query}`;
         const sharedAccount = sharedQqAccount?.deviceId === device.id ? sharedQqAccount : null;
@@ -489,17 +537,9 @@ export const requestQq = async <T = unknown>(
             throw new OnlineProviderError('unavailable', 'QQ Music is switching to a different shared account', 'qq');
         }
         const connection = sharedAccount?.connectionId;
-        const result = await requestSharedLogin(path, method, isPost ? JSON.stringify(payload) : undefined, signal, connection);
-        const response = new Response(null, { status: result.status });
-        if (operation !== 'logout' && sharedDevice !== getSharedLoginState().device) {
-            throw new OnlineProviderError(getSharedLoginState().deviceLost ? 'auth-required' : 'unavailable', 'Shared login device changed', 'qq');
-        }
-        const reply = result.body as { data?: { profile?: unknown } } | null;
-        if (result.connectionId && operation === 'login_status' && reply?.data?.profile) {
-            const account = normalizeQqUser(reply.data.profile);
-            sharedQqAccount = { deviceId: device.id, connectionId: result.connectionId, accountId: String(account.id) };
-        }
-        return { response, body: result.body };
+        const result = await requestSharedLogin(path, method, isPost ? JSON.stringify(payload) : undefined, signal, connection, device.id);
+        if (operation !== 'logout') ensureSharedQqDevice(device);
+        return sharedAnswer(result);
     };
     // The answer and its body, read together: the time limit covers both.
     const send = async (signal?: AbortSignal) => {
@@ -507,15 +547,31 @@ export const requestQq = async <T = unknown>(
         const answer = await fetch(`${base}${endpoint.path}?${query}`, { ...init, ...(signal ? { signal } : {}) });
         return { response: answer, body: await readJsonBody(answer) };
     };
-    const { response, body } = await (LOGIN_REQUESTS.has(operation) ? withLoginRequestLimit(send)
-        : ONLINE_REQUESTS.has(operation) ? withOnlineRequestLimit(send, QQ_ONLINE_REQUEST_LIMIT_MS) : send());
+    const revision = sharedQqRevision;
+    const readAnswer = async () => {
+        if (sharedDevice && (operation === 'login_status'
+            || (operation === 'music_play' && sharedQqAccount?.deviceId !== sharedDevice.id))) {
+            const status = await readSharedQqStatus(sharedDevice);
+            ensureSharedQqRevision(revision);
+            if (operation === 'login_status') return sharedAnswer(status);
+            if (status.status !== 200) return sharedAnswer(status);
+            if (sharedQqAccount?.deviceId !== sharedDevice.id) {
+                return sharedAnswer({ status: 401, body: { error: 'provider_sign_in_required' } });
+            }
+        }
+        return LOGIN_REQUESTS.has(operation) ? withLoginRequestLimit(send)
+            : ONLINE_REQUESTS.has(operation) ? withOnlineRequestLimit(send, QQ_ONLINE_REQUEST_LIMIT_MS) : send();
+    };
+    const { response, body } = await readAnswer();
+    if (sharedDevice && (operation === 'login_status' || operation === 'music_play')) {
+        ensureSharedQqRevision(revision);
+    }
     if (!response.ok) {
         // A missing, expired, rejected, or non-persisted backend session is surfaced uniformly as 401.
         // The session does not go at once: any route answers 401 when QQ refuses that one call (upstream 1000 / 104401 /
         // 104400), which does not by itself say the sign-in ran out. login_status is asked once and decides
         // (checkSessionAfterRefusal); at an account read login_status itself decides (accountRead, signInRanOut).
         if (response.status === 401) {
-            if (sharedDevice && operation === 'login_status') sharedQqAccount = null;
             if (operation !== 'login_status' && cookie) checkSessionAfterRefusal(cookie);
             throw new OnlineProviderError('auth-required', 'QQMusicApi login required', 'qq', body, response.status);
         }
@@ -543,9 +599,13 @@ export const requestQq = async <T = unknown>(
     }
     assertUpstreamAccepted(operation, body);
     if (sharedDevice) {
-        const reply = body as { data?: { profile?: unknown } } | null;
-        if (operation === 'login_status' && !reply?.data?.profile) sharedQqAccount = null;
-        if (operation === 'logout') sharedQqAccount = null;
+        // A QR confirmation or logout can change the shared account without changing this device.
+        const confirmed = operation === 'login_qr_check' && Number((body as { code?: unknown } | null)?.code) === QR_CONFIRMED_CODE;
+        if ((operation === 'logout' || confirmed) && getSharedLoginState().device?.id === sharedDevice.id) {
+            sharedQqRevision++;
+            sharedQqStatus = null;
+            sharedQqAccount = null;
+        }
     } else {
         persistConfirmedSession(operation, body);
     }
