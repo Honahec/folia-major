@@ -287,7 +287,7 @@ const readSharedQqStatus = (device: SharedLoginDevice) => {
 
 export const usesSharedQqSession = (): boolean => {
     const state = getSharedLoginState();
-    return Boolean(state.device || state.deviceLost);
+    return Boolean(state.device || state.deviceLost || state.discoveryUnavailable);
 };
 
 export const hasQqSession = (): boolean => usesSharedQqSession() ? getSharedLoginState().device?.id === sharedQqAccount?.deviceId : Boolean(getWebSessionCookie());
@@ -487,7 +487,10 @@ export const requestQq = async <T = unknown>(
         );
     }
     if (typeof window !== 'undefined') await initializeSharedLogin();
-    const { device: sharedDevice, deviceLost } = getSharedLoginState();
+    const { device: sharedDevice, deviceLost, discoveryUnavailable } = getSharedLoginState();
+    if (!sharedDevice && discoveryUnavailable) {
+        throw new OnlineProviderError('network', 'Shared login discovery is unavailable', 'qq');
+    }
     if (deviceLost && !sharedDevice) {
         throw new OnlineProviderError('auth-required', 'Reconnect this device to use the shared sign-in', 'qq');
     }

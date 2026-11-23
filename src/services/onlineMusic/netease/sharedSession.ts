@@ -1,11 +1,13 @@
-import { getSharedLoginState, requestSharedLogin } from '../../sync/sharedLoginClient';
+import { getSharedLoginState, requestSharedLogin, type SharedLoginDevice } from '../../sync/sharedLoginClient';
 import { useOnlineProviderAccountStore } from '../../../stores/useOnlineProviderAccountStore';
 import { OnlineProviderError } from '../../../types/onlineMusic';
+import { withOnlineRequestLimit } from '../failure/onlineRequestLimit';
 
 // Keep a connection identifier with the account shown in Folia. The credential stays in the Worker.
 
 let observed: { deviceId: string; connectionId: string; accountId: string } | null = null;
 let statusSequence = 0;
+let statusRequest: { device: SharedLoginDevice; sequence: number; pending: Promise<Response> } | null = null;
 let connectionCheck: { deviceId: string; at: number } | null = null;
 
 const displayedAccountId = (): string | undefined => {
@@ -38,7 +40,7 @@ const writes = new Set([
 
 export const usesSharedNeteaseSession = (): boolean => {
     const state = getSharedLoginState();
-    return Boolean((state.device || state.deviceLost) && (state.providers?.includes('netease') ?? true));
+    return Boolean((state.device || state.deviceLost || state.discoveryUnavailable) && (state.providers?.includes('netease') ?? true));
 };
 
 export const hasSharedNeteaseAccount = (): boolean =>
@@ -50,13 +52,17 @@ const accountIdFrom = (body: unknown): string | null => {
     return typeof id === 'string' || typeof id === 'number' ? String(id) : null;
 };
 
-export const requestSharedNetease = async (endpoint: string, signal?: AbortSignal): Promise<Response> => {
-    const device = getSharedLoginState().device;
-    if (!device) throw new OnlineProviderError('auth-required', 'Reconnect this device to use the shared sign-in', 'netease');
+const sendSharedNetease = async (endpoint: string, signal?: AbortSignal): Promise<Response> => {
+    const { device, discoveryUnavailable } = getSharedLoginState();
+    if (!device) {
+        if (discoveryUnavailable) {
+            throw new OnlineProviderError('network', 'Shared login discovery is unavailable', 'netease');
+        }
+        throw new OnlineProviderError('auth-required', 'Reconnect this device to use the shared sign-in', 'netease');
+    }
 
     const route = endpoint.split('?')[0];
     const status = route === '/login/status';
-    if (status) statusSequence += 1;
     const sequence = statusSequence;
     const probe = status || route === '/user/account' || route.startsWith('/login/qr/');
     const connection = observed?.deviceId === device.id ? observed : null;
@@ -74,10 +80,10 @@ export const requestSharedNetease = async (endpoint: string, signal?: AbortSigna
     if (device !== latest.device) {
         throw new OnlineProviderError(latest.deviceLost ? 'auth-required' : 'unavailable', 'Shared login device changed', 'netease');
     }
-    if (result.status === 409) {
-        throw new OnlineProviderError('auth-required', 'The shared NetEase account changed. Refresh the account and try again.', 'netease');
+    const reply = result.body as { error?: string; code?: number; data?: { code?: number; profile?: unknown } } | null;
+    if (result.status === 409 && reply?.error === 'connection_changed') {
+        throw new OnlineProviderError('unavailable', 'The shared NetEase account changed. Refresh the account and try again.', 'netease');
     }
-    const reply = result.body as { error?: string; code?: number } | null;
     if (result.status === 404 && reply?.error === 'not_found') {
         throw new OnlineProviderError('unsupported', 'This route is not available through shared NetEase login', 'netease');
     }
@@ -88,14 +94,52 @@ export const requestSharedNetease = async (endpoint: string, signal?: AbortSigna
     if (status && sequence !== statusSequence) {
         throw new OnlineProviderError('unavailable', 'A newer NetEase account check replaced this request', 'netease');
     }
-    if (status && result.status === 200) {
+    if (status) {
+        const code = Number(reply?.code ?? reply?.data?.code);
         const accountId = accountIdFrom(result.body);
-        observed = result.connectionId && accountId ? { deviceId: device.id, connectionId: result.connectionId, accountId } : null;
+        const signedOut = result.status < 500 && [301, 401, 403].includes(code);
+        if (signedOut || (result.status === 200 && code === 200 && reply?.data?.profile === null)) {
+            observed = null;
+        } else if (result.status === 200 && code === 200 && result.connectionId && accountId) {
+            observed = { deviceId: device.id, connectionId: result.connectionId, accountId };
+        } else {
+            throw new OnlineProviderError('unavailable', `The shared NetEase sign-in check could not confirm a session (HTTP ${result.status})`, 'netease');
+        }
     }
-    if (status && [301, 401, 403].includes(result.status)) observed = null;
     if (route === '/logout' && result.status === 200) {
         statusSequence += 1;
         observed = null;
     }
     return Response.json(result.body, { status: result.status });
+};
+
+// Startup playback and the account reader share a probe before using the Worker session.
+const readSharedStatus = (endpoint: string) => {
+    const device = getSharedLoginState().device;
+    if (!device) return sendSharedNetease(endpoint);
+    if (statusRequest?.device === device && statusRequest.sequence === statusSequence) {
+        return statusRequest.pending;
+    }
+    const sequence = ++statusSequence;
+    const pending = withOnlineRequestLimit(signal => sendSharedNetease(endpoint, signal), 15_000).finally(() => {
+        if (statusRequest?.pending === pending) statusRequest = null;
+    });
+    statusRequest = { device, sequence, pending };
+    return pending;
+};
+
+export const requestSharedNetease = async (endpoint: string, signal?: AbortSignal): Promise<Response> => {
+    const route = endpoint.split('?')[0];
+    const device = getSharedLoginState().device;
+    if (route === '/login/status' || (route === '/song/url/v1' && device && observed?.deviceId !== device.id)) {
+        const status = readSharedStatus(route === '/login/status' ? endpoint : '/login/status');
+        const sequence = statusSequence;
+        const response = await status;
+        signal?.throwIfAborted();
+        if (sequence !== statusSequence || getSharedLoginState().device !== device) {
+            throw new OnlineProviderError('unavailable', 'A newer NetEase account check replaced this request', 'netease');
+        }
+        if (route === '/login/status') return response.clone();
+    }
+    return sendSharedNetease(endpoint, signal);
 };

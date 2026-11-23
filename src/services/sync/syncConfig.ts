@@ -28,13 +28,9 @@ const readJson = <T,>(key: string, fallback: T): T => {
         return fallback;
     }
 
-    const stored = window.localStorage.getItem(key);
-    if (!stored) {
-        return fallback;
-    }
-
     try {
-        return JSON.parse(stored) as T;
+        const stored = window.localStorage.getItem(key);
+        return stored ? JSON.parse(stored) as T : fallback;
     } catch {
         return fallback;
     }
@@ -47,7 +43,7 @@ const emitEvent = (eventName: string) => {
 };
 
 export const getSyncConfig = (): SyncProviderConfig => {
-    const stored = readJson<Partial<SyncProviderConfig>>(SYNC_CONFIG_STORAGE_KEY, {});
+    const stored = readJson<Partial<SyncProviderConfig> | null>(SYNC_CONFIG_STORAGE_KEY, null) ?? {};
     return {
         ...DEFAULT_CONFIG,
         ...stored,

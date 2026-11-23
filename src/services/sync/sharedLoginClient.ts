@@ -1,3 +1,5 @@
+import { getSyncConfig } from './syncConfig';
+
 // Connect this device to a shared login server without retaining the enrollment token.
 
 export interface SharedLoginDevice {
@@ -10,6 +12,7 @@ export interface SharedLoginState {
     device: SharedLoginDevice | null;
     origin: string | null;
     deviceLost?: boolean;
+    discoveryUnavailable?: boolean;
     providers?: readonly string[];
     accountId?: string;
 }
@@ -22,6 +25,7 @@ interface SharedLoginResponse {
 
 let state: SharedLoginState = { available: false, device: null, origin: null };
 let loading: Promise<void> | undefined;
+let discoveryGeneration = 0;
 const listeners = new Set<() => void>();
 
 const publish = (next: SharedLoginState) => {
@@ -66,37 +70,63 @@ export const requestSharedLogin = async (
         headers,
     }).then(async result => ({ status: result.status, body: await result.json().catch(() => null) as unknown, connectionId: result.headers.get('X-Folia-Connection') }));
     signal?.throwIfAborted();
-    if (previous === state && state.device && typeof response.body === 'object' && response.body !== null && 'error' in response.body
+    if (expectedDevice && previous === state && state.device?.id === expectedDevice
+        && typeof response.body === 'object' && response.body !== null && 'error' in response.body
         && (response.body.error === 'device_required' || response.body.error === 'device_changed')) {
+        discoveryGeneration++;
         loading = undefined;
-        publish({ ...state, device: null, deviceLost: true });
+        publish({ ...state, device: null, deviceLost: true, discoveryUnavailable: false });
     }
     return response;
 };
 
 export const initializeSharedLogin = (refresh = false): Promise<void> => {
     if (refresh) loading = undefined;
-    loading ??= (async () => {
+    if (loading) return loading;
+    const generation = ++discoveryGeneration;
+    loading = (async () => {
         const { electron, location } = window;
-        const origin = electron ? await electron.getSharedLoginOrigin?.() ?? null : location.origin;
-        if (electron && !origin) {
-            publish({ ...state, available: Boolean(electron.enrollSharedLogin), device: null, origin: null });
+        const origin = electron ? await electron.getSharedLoginOrigin?.().catch(() => null) ?? null : location.origin;
+        if (generation !== discoveryGeneration) return loading;
+        const config = getSyncConfig();
+        if (electron && !origin && !state.deviceLost) {
+            if (config.deviceId || state.device) {
+                publish({ ...state, device: null, origin: state.origin ?? config.workerBaseUrl, discoveryUnavailable: true });
+                throw new Error('The desktop shared login session is unavailable');
+            }
+            publish({ available: Boolean(electron.enrollSharedLogin), device: null, origin: null });
             return;
         }
+        const previous = state;
+        const enrolled = electron ? Boolean(origin) : Boolean(config.deviceId);
+        const unavailable = () => {
+            if (generation === discoveryGeneration && (enrolled || previous.device)) {
+                publish({ ...state, origin, discoveryUnavailable: true });
+            }
+        };
         const result = await requestSharedLogin('/device', 'GET', undefined, AbortSignal.timeout(5_000)).catch((error: unknown) => {
-            if (electron && origin) publish({ ...state, origin, deviceLost: true });
+            unavailable();
             throw error;
         });
+        if (generation !== discoveryGeneration) return loading;
+        const device = result.status === 200 ? deviceFrom(result.body) : null;
+        const rejected = result.status === 401 && (result.body as { error?: unknown } | null)?.error === 'device_required';
+        if (!device && !rejected) {
+            if (!enrolled && !previous.device && !previous.deviceLost) return;
+            unavailable();
+            throw new Error('Shared login discovery is unavailable');
+        }
         publish({
-            available: Boolean(electron?.enrollSharedLogin) || result.status === 200 || result.status === 401,
-            device: deviceFrom(result.body),
+            available: true,
+            device,
             origin,
             accountId: result.status === 200 && typeof result.body === 'object' && result.body !== null
                 && 'accountId' in result.body && typeof result.body.accountId === 'string' ? result.body.accountId : undefined,
             providers: result.status === 200 ? providersFrom(result.body) : state.providers,
-            deviceLost: result.status !== 200 && (state.deviceLost || Boolean(electron && origin)),
+            deviceLost: rejected && (Boolean(previous.deviceLost || previous.device) || enrolled),
         });
     })().catch(() => {
+        if (generation !== discoveryGeneration) return loading;
         publish({ ...state, available: Boolean(window.electron?.enrollSharedLogin) });
         loading = undefined;
     });

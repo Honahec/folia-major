@@ -560,6 +560,9 @@ export const neteaseProvider: OnlineMusicProvider = {
             const loginId = loginProfile?.userId ?? loginProfile?.id;
             if (!accountProfile || [301, 401, 403].includes(accountCode) || !accountId || !loginId || String(accountId) !== String(loginId)) {
                 noteLoginStatusCheck(diagnosticLine`user/account code=${accountCode} profile=${yesNo(Boolean(accountProfile))} same-user=${yesNo(Boolean(accountId && loginId && String(accountId) === String(loginId)))}`);
+                if (usesSharedNeteaseSession()) {
+                    throw new OnlineProviderError('unavailable', 'The two NetEase account checks disagreed', 'netease');
+                }
                 return null;
             }
 
