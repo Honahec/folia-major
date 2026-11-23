@@ -18,15 +18,14 @@ const base: ElectronSettingsState = {
     ENABLE_UPDATE_CHECK: true, ENABLE_AUTO_UPDATE: false, UPDATE_CHANNEL: 'realeco',
     STAGE_MODE_SOURCE: '', DISCORD_RICH_PRESENCE_ENABLED: false,
 };
-const setElectronSettings = vi.fn();
-/** The settings after the form's last change (setElectronSettings takes an updater). */
+const editAiSettings = vi.fn<(patch: Partial<ElectronSettingsState>) => void>();
+/** The settings after applying the form's last patch. */
 const changed = (patch: Partial<ElectronSettingsState>) => {
-    const update = setElectronSettings.mock.calls.at(-1)![0] as (previous: ElectronSettingsState) => ElectronSettingsState;
-    return update({ ...base, ...patch });
+    return { ...base, ...patch, ...editAiSettings.mock.calls.at(-1)?.[0] };
 };
 const render = async (patch: Partial<ElectronSettingsState>, savedOpenAIKeyEndpoint: string | null = null) => {
     const value = { viewProps: { desktop: { model: {
-        electronSettings: { ...base, ...patch }, setElectronSettings, onSaveElectronSettings: save,
+        electronSettings: { ...base, ...patch }, editAiSettings, onSaveElectronSettings: save,
         electronSaveStatus: 'idle', savedAiApiKeys: { GEMINI_API_KEY: false, OPENAI_API_KEY: savedOpenAIKeyEndpoint !== null },
         savedOpenAIKeyEndpoint, onClearAiApiKey: vi.fn(),
     } } } } as unknown as SettingsPageContextValue;
